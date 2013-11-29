@@ -1,0 +1,7 @@
+#ifndef _SCINTEX_SCINTEX_HPP_
+#define _SCINTEX_SCINTEX_HPP_
+
+#define SCINTEX_VERSION_MAJOR 0
+#define SCINTEX_VERSION_MINOR 1
+
+#endif
