@@ -67,7 +67,7 @@ namespace scintex
     const QList<ColorRegion> &contiguousColorRegions() const;
     
     const QPixmap &backing() const;
-    const QRect &internalGeometry() const;
+    QPoint contentPosition() const;
     
   protected:
     virtual void changeEvent(QEvent *event);
@@ -86,6 +86,7 @@ namespace scintex
     virtual void invalidateRegion(const quint32 i, const quint32 j);
   
   private:
+    void updateContiguousColorRegions();
     void dirty(const QRect &region);
     void renderOn(QPaintDevice *device);
     quint32 marginSize(const Location location);

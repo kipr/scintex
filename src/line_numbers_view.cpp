@@ -28,7 +28,13 @@ void LineNumbersView::paintEvent(QPaintEvent *event)
   
   const TextView *const view = MarginView::textView();
   QPainter p(this);
-  p.drawPixmap(0, view->textMargins().top() + view->internalGeometry().y() * 2, _backing);
+  qDebug() << "Content Pos" << view->contentPosition();
+  const QRect target(0, view->textMargins().top()
+    + view->contentPosition().y() * _backing.devicePixelRatio(),
+    width(), height());
+  const qreal dpr = _backing.devicePixelRatio();
+  const QRect source(0, 0, _backing.width(), _backing.height());
+  p.drawPixmap(target, _backing, source);
 }
 
 void LineNumbersView::engaged()
@@ -53,17 +59,19 @@ void LineNumbersView::fit(const quint32 lines)
 
   const quint32 lineHeight = view->fontMetrics().height();
   
-  _backing = QPixmap(fontMetrics().width(QString::number(actual)) + 10,
-    textView()->backing().height());
-  resize(_backing.width(), _backing.height());
+  const qreal dpr = devicePixelRatio();
+  _backing = QPixmap((fontMetrics().width(QString::number(actual)) + 10) * dpr,
+    textView()->backing().height() * dpr);
+  _backing.setDevicePixelRatio(dpr);
+  resize(_backing.width() / dpr, _backing.height() / dpr);
   
   QPainter p(&_backing);
-  p.fillRect(0, 0, _backing.width(), _backing.height(), Qt::white);
+  p.fillRect(0, 0, _backing.width() / dpr, _backing.height() / dpr, Qt::yellow);
   p.setPen(Qt::lightGray);
   
   for(quint32 i = 0; i < lines; ++i) {
     p.drawText(0, i * lineHeight,
-      _backing.width(), lineHeight, Qt::AlignHCenter | Qt::AlignVCenter,
+      _backing.width() / dpr, lineHeight, Qt::AlignHCenter | Qt::AlignVCenter,
       QString::number(i + 1));
   }
   _lines = lines;

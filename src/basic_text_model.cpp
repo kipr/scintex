@@ -15,6 +15,12 @@ const QString &BasicTextModel::backing() const
   return _backing;
 }
 
+void BasicTextModel::setBacking(const QString &backing)
+{
+  _backing = backing;
+  Q_EMIT updated(0, _backing.size());
+}
+
 void BasicTextModel::create(const QString &str, const quint32 i)
 {
   Q_ASSERT(i < _backing.size());

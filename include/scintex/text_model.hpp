@@ -29,6 +29,8 @@ namespace scintex
     
     virtual quint32 index(const Cursor *const cursor) const = 0;
     
+    quint32 lines() const;
+    
   Q_SIGNALS:
     void updated(const quint32 i, const quint32 j);
   };

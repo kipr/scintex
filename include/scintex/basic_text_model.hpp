@@ -12,6 +12,7 @@ namespace scintex
     BasicTextModel(const QString &text = QString());
     
     const QString &backing() const;
+    void setBacking(const QString &backing);
     
     virtual void create(const QString &str, const quint32 i);
     virtual QString read(const quint32 i, const quint32 j) const;

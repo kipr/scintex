@@ -61,7 +61,13 @@ void TextViewport::paintEvent(QPaintEvent *event)
   p.fillRect(event->rect(), cp->color("background", Qt::white));
   const QRect target = event->rect().translated(left + tm.left(),
     top + tm.top());
-  const QRect source = event->rect().translated(-x(), -y());
+  const qreal dpr = v->_backing.devicePixelRatio();
+  
+  QRect source = event->rect().translated(-x(), -y());
+  source.translate(source.x() * (dpr - 1.0), source.y() * (dpr - 1.0));
+  source.setWidth(source.width() * dpr);
+  source.setHeight(source.height() * dpr);
+  
   p.drawPixmap(target, v->_backing, source);
   p.setPen(QPen(cp->color("text/cursor", Qt::black), 2));
   
@@ -95,7 +101,6 @@ void TextViewport::paintEvent(QPaintEvent *event)
       quint32 offset = -x();
       Q_FOREACH(MarginView *const marginView, mv[TextView::Right]) {
         offset += marginView->width();
-        // qDebug() << logicalDpiX() << physicalDpiX();
         marginView->render(this, QPoint(v->width() - x() - offset, geometry().y()), QRegion(), 0);
       }
     }
@@ -118,6 +123,7 @@ TextView::TextView(QWidget *const parent)
   setFocusPolicy(Qt::StrongFocus);
   setWidget(new TextViewport(this));
   setWidgetResizable(true);
+  updateDimensions();
 }
 
 TextView::~TextView()
@@ -128,17 +134,18 @@ TextView::~TextView()
   for(quint8 i = 0; i < 4; ++i){
     // qDeleteAll(_marginViews[(TextView::Location)i]);
   }
-  // delete takeWidget();
+  // takeWidget();
 }
 
 void TextView::setModel(TextModel *const model)
 {
   _model = model;
   connect(_model, SIGNAL(updated(quint32, quint32)), SLOT(updateDimensions()));
+  connect(_model, SIGNAL(updated(quint32, quint32)), SLOT(rehighlight()));
   connect(_model, SIGNAL(updated(quint32, quint32)),
     SLOT(invalidateRegion(quint32, quint32)));
   updateDimensions();
-  invalidateRegion(0, model->size());
+  invalidateRegion(0, model ? model->size() : 0);
   setColorRegions(QList<ColorRegion>());
 }
 
@@ -220,16 +227,22 @@ void TextView::updateDimensions()
 
   widget()->setMinimumSize(textWidth + left, textHeight + top);
   
-  if(_backing.width() == textWidth && _backing.height() == textHeight) {
+  const qreal dpr = devicePixelRatio();
+  if(_backing.width() == textWidth * dpr
+    && _backing.height() == textHeight * dpr) {
     return;
   }
-  _backing = QPixmap(textWidth, textHeight);
-  dirty(QRect(0, 0, textWidth, textHeight));
+  
+  _backing = QPixmap(textWidth * dpr, textHeight * dpr);
+  qDebug() << "Backing resized to" << _backing.size();
+  _backing.setDevicePixelRatio(dpr);
+  dirty(QRect(0, 0, _backing.width(), _backing.height()));
 }
 
 void TextView::rehighlight()
 {
-  update();
+  updateContiguousColorRegions();
+  widget()->update();
 }
 
 void TextView::invalidateRegion(const quint32 i, const quint32 j)
@@ -246,6 +259,7 @@ void TextView::invalidateRegion(const quint32 i, const quint32 j)
 
 void TextView::changeEvent(QEvent *event)
 {
+  if(!_model) return;
   if(event->type() == QEvent::FontChange) {
     invalidateRegion(0, _model->size());
     updateDimensions();
@@ -316,12 +330,14 @@ quint32 TextView::marginSize(const Location location)
 
 quint32 TextView::computeHeight() const
 {
+  if(!_model) return 1;
   const quint32 lines = _model->occurencesOf('\n', 0, _model->size()) + 1;
   return lines * fontMetrics().height();
 }
 
 quint32 TextView::computeWidth() const
 {
+  if(!_model) return 1;
   quint32 largestRunStart = 0;
   quint32 largestRunEnd = 0;
   quint32 last = 0;
@@ -341,7 +357,7 @@ void TextView::setMarginsVisible(const bool marginsVisible)
 {
   _marginsVisible = marginsVisible;
   updateDimensions();
-  update();
+  widget()->update();
 }
 
 bool TextView::marginsVisible() const
@@ -385,11 +401,8 @@ const QList<Cursor *> &TextView::cursors() const
   return _cursors;
 }
 
-void TextView::setColorRegions(const QList<ColorRegion> &colorRegions)
+void TextView::updateContiguousColorRegions()
 {
-  _colorRegions = colorRegions;
-  qSort(_colorRegions);
-  
   _contiguousColorRegions.clear();
   if(!_model) return;
   
@@ -418,7 +431,12 @@ void TextView::setColorRegions(const QList<ColorRegion> &colorRegions)
   
   // TODO: Make less naive
   dirty(QRect(0, 0, _backing.width(), _backing.height()));
-  update();
+}
+
+void TextView::setColorRegions(const QList<ColorRegion> &colorRegions)
+{
+  _colorRegions = colorRegions;
+  qSort(_colorRegions);
 }
 
 const QList<ColorRegion> &TextView::colorRegions() const
@@ -436,20 +454,21 @@ const QPixmap &TextView::backing() const
   return _backing;
 }
 
-const QRect &TextView::internalGeometry() const
+QPoint TextView::contentPosition() const
 {
-  return widget()->geometry();
+  return widget()->pos();
 }
 
 void TextView::dirty(const QRect &region)
 {
   _dirty.append(region);
   renderOn(&_backing);
-  update();
+  widget()->update();
 }
 
 void TextView::renderOn(QPaintDevice *device)
 {
+  if(_backing.isNull() || _backing.width() == 0 || _backing.height() == 0) return;
   QPainter p(device);
   if(!_model) return;
   
@@ -494,7 +513,7 @@ void TextView::renderOn(QPaintDevice *device)
       }
       lit = it;
     }
-  
+    
     quint32 xOff = 0;
     quint32 line = line1;
     for(; lit != _contiguousColorRegions.end(); ++lit) {
