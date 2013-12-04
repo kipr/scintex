@@ -80,20 +80,13 @@ void TextViewport::paintEvent(QPaintEvent *event)
     p.drawLine(xOff, yOff, xOff, yOff + lineHeight);
   }
   
-  p.setPen(Qt::lightGray);
-  if(left > 0)   p.drawLine(-x() + left, -y(), -x() + left, -y() + height());
-  if(right > 0)  p.drawLine(width() + x() + right, -y(), x() + width() + right, -y() + height());
-  if(top > 0)    p.drawLine(-x(), -y() + top, width(), -y() + top);
-  if(bottom > 0) p.drawLine(-x(), -y() + bottom, -x() + width(), -y() + bottom);
-  
-  p.end();
-  
+  p.translate(geometry().x(), geometry().y());
   if(mvis) {
     QList<MarginView *> *const mv = v->_marginViews;
     {
       quint32 offset = 0;
       Q_FOREACH(MarginView *const marginView, mv[TextView::Left]) {
-        marginView->render(this, QPoint(-x() + offset, -y()), QRegion(), 0);
+        marginView->render(&p, QPoint(-x() + offset, -y()), QRegion(), 0);
         offset += marginView->width();
       }
     }
@@ -101,10 +94,17 @@ void TextViewport::paintEvent(QPaintEvent *event)
       quint32 offset = -x();
       Q_FOREACH(MarginView *const marginView, mv[TextView::Right]) {
         offset += marginView->width();
-        marginView->render(this, QPoint(v->width() - x() - offset, geometry().y()), QRegion(), 0);
+        marginView->render(&p, QPoint(v->width() - x() - offset, geometry().y()), QRegion(), 0);
       }
     }
   }
+  
+  p.resetTransform();
+  p.setPen(QColor(240, 240, 240));
+  if(left > 0)   p.drawLine(-x() + left, -y(), -x() + left, -y() + height());
+  if(right > 0)  p.drawLine(width() + x() + right, -y(), x() + width() + right, -y() + height());
+  if(top > 0)    p.drawLine(-x(), -y() + top, width(), -y() + top);
+  if(bottom > 0) p.drawLine(-x(), -y() + bottom, -x() + width(), -y() + bottom);
 }
 
 TextView::TextView(QWidget *const parent)
@@ -234,7 +234,7 @@ void TextView::updateDimensions()
   }
   
   _backing = QPixmap(textWidth * dpr, textHeight * dpr);
-  qDebug() << "Backing resized to" << _backing.size();
+
   _backing.setDevicePixelRatio(dpr);
   dirty(QRect(0, 0, _backing.width(), _backing.height()));
 }
