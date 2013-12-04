@@ -3,6 +3,8 @@
 
 #include "margin_view.hpp"
 
+#include <QPixmap>
+
 namespace scintex
 {
   class LineNumbersView : public MarginView
@@ -18,6 +20,8 @@ namespace scintex
     
   private:
     void fit(const quint32 lines);
+    QPixmap _backing;
+    quint32 _lines;
   };
 }
 

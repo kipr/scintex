@@ -25,5 +25,6 @@ void ScrollOverviewView::paintEvent(QPaintEvent *event)
   TextView *const view = MarginView::textView();
   
   QPainter pa(this);
-  // pa.drawPixmap(0, 0, view->textPixmap().scaled(size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+  pa.drawPixmap(0, 0, view->backing().scaled(size(),
+    Qt::KeepAspectRatio, Qt::SmoothTransformation));
 }

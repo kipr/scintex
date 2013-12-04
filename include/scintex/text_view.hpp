@@ -1,7 +1,7 @@
 #ifndef _SCINTEX_TEXT_VIEW_HPP_
 #define _SCINTEX_TEXT_VIEW_HPP_
 
-#include <QWidget>
+#include <QScrollArea>
 #include <QPixmap>
 
 #include "color_region.hpp"
@@ -13,12 +13,13 @@ namespace scintex
   class ColorPalette;
   class InputController;
   class Cursor;
+  class TextViewport;
   
-  class TextView : public QWidget
+  class TextView : public QScrollArea
   {
   Q_OBJECT
   public:
-    friend class MarginView;
+    friend class TextViewport;
     
     TextView(QWidget *const parent = 0);
     ~TextView();
@@ -64,6 +65,9 @@ namespace scintex
     void setColorRegions(const QList<ColorRegion> &colorRegions);
     const QList<ColorRegion> &colorRegions() const;
     const QList<ColorRegion> &contiguousColorRegions() const;
+    
+    const QPixmap &backing() const;
+    const QRect &internalGeometry() const;
     
   protected:
     virtual void changeEvent(QEvent *event);

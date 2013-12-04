@@ -13,8 +13,97 @@
 
 using namespace scintex;
 
-TextView::TextView(QWidget *const parent)
+namespace scintex
+{
+  class TextViewport : public QWidget
+  {
+  public:
+    TextViewport(TextView *const parent = 0);
+  protected:
+    void paintEvent(QPaintEvent *event);
+  private:
+    TextView *const _tv;
+  };
+}
+
+TextViewport::TextViewport(TextView *const parent)
   : QWidget(parent)
+  , _tv(parent)
+{
+  Q_ASSERT(_tv);
+}
+
+void TextViewport::paintEvent(QPaintEvent *event)
+{
+  TextView *const v = _tv;
+  bool mvis = v->_marginsVisible;
+  
+  qint32 left = 0;
+  qint32 right = 0;
+  qint32 top = 0;
+  qint32 bottom = 0;
+  
+  if(mvis) {
+    v->fitMarginViews();
+    // Compute margin sizes
+    left = v->marginSize(TextView::Left);
+    right = v->marginSize(TextView::Right);
+    top = v->marginSize(TextView::Top);
+    bottom = v->marginSize(TextView::Bottom);
+  }
+  
+  TextModel *const mo = v->_model;
+  ColorPalette *const cp = v->_colorPalette;
+  const QMargins &tm = v->_textMargins;
+  
+  QPainter p(this);
+  const quint32 lineHeight = v->fontMetrics().height();
+  p.fillRect(event->rect(), cp->color("background", Qt::white));
+  const QRect target = event->rect().translated(left + tm.left(),
+    top + tm.top());
+  const QRect source = event->rect().translated(-x(), -y());
+  p.drawPixmap(target, v->_backing, source);
+  p.setPen(QPen(cp->color("text/cursor", Qt::black), 2));
+  
+  Q_FOREACH(Cursor *const cursor, v->_cursors) {
+    const quint32 yOff = cursor->row() * lineHeight + top + tm.top();
+    const quint32 i = mo->offset(cursor->row());
+    const QString line = mo->read(i, mo->index(cursor));
+    const quint32 xOff = v->fontMetrics().width(line) + left + tm.left();
+    if(-x() > xOff || xOff + x() < left + tm.left()) continue;
+    p.drawLine(xOff, yOff, xOff, yOff + lineHeight);
+  }
+  
+  p.setPen(Qt::lightGray);
+  if(left > 0)   p.drawLine(-x() + left, -y(), -x() + left, -y() + height());
+  if(right > 0)  p.drawLine(width() + x() + right, -y(), x() + width() + right, -y() + height());
+  if(top > 0)    p.drawLine(-x(), -y() + top, width(), -y() + top);
+  if(bottom > 0) p.drawLine(-x(), -y() + bottom, -x() + width(), -y() + bottom);
+  
+  p.end();
+  
+  if(mvis) {
+    QList<MarginView *> *const mv = v->_marginViews;
+    {
+      quint32 offset = 0;
+      Q_FOREACH(MarginView *const marginView, mv[TextView::Left]) {
+        marginView->render(this, QPoint(-x() + offset, -y()), QRegion(), 0);
+        offset += marginView->width();
+      }
+    }
+    {
+      quint32 offset = -x();
+      Q_FOREACH(MarginView *const marginView, mv[TextView::Right]) {
+        offset += marginView->width();
+        // qDebug() << logicalDpiX() << physicalDpiX();
+        marginView->render(this, QPoint(v->width() - x() - offset, geometry().y()), QRegion(), 0);
+      }
+    }
+  }
+}
+
+TextView::TextView(QWidget *const parent)
+  : QScrollArea(parent)
   , _colorPalette(0)
   , _model(0)
   , _marginsVisible(true)
@@ -27,16 +116,19 @@ TextView::TextView(QWidget *const parent)
   setColorPalette(new BasicColorPalette);
   setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
   setFocusPolicy(Qt::StrongFocus);
+  setWidget(new TextViewport(this));
+  setWidgetResizable(true);
 }
 
 TextView::~TextView()
 {
-  delete _colorPalette;
-  delete _inputController;
-  qDeleteAll(_cursors);
+  // delete _colorPalette;
+  // delete _inputController;
+  // qDeleteAll(_cursors);
   for(quint8 i = 0; i < 4; ++i){
-    qDeleteAll(_marginViews[(TextView::Location)i]);
+    // qDeleteAll(_marginViews[(TextView::Location)i]);
   }
+  // delete takeWidget();
 }
 
 void TextView::setModel(TextModel *const model)
@@ -125,7 +217,8 @@ void TextView::updateDimensions()
   const quint32 textHeight = computeHeight();
   const quint32 width = textWidth + left + right;
   const quint32 height = textHeight + top + bottom;
-  setMinimumSize(width, height);
+
+  widget()->setMinimumSize(textWidth + left, textHeight + top);
   
   if(_backing.width() == textWidth && _backing.height() == textHeight) {
     return;
@@ -161,60 +254,7 @@ void TextView::changeEvent(QEvent *event)
 
 void TextView::paintEvent(QPaintEvent *event)
 {
-  qint32 left = 0;
-  qint32 right = 0;
-  qint32 top = 0;
-  qint32 bottom = 0;
-  
-  if(_marginsVisible) {
-    fitMarginViews();
-    // Compute margin sizes
-    left = marginSize(TextView::Left);
-    right = marginSize(TextView::Right);
-    top = marginSize(TextView::Top);
-    bottom = marginSize(TextView::Bottom);
-  }
-  
-  QPainter p(this);
-  const quint32 lineHeight = fontMetrics().height();
-  p.fillRect(event->rect(), _colorPalette->color("background", Qt::white));
-  const QRect target = event->rect().translated(left + _textMargins.left(),
-    top + _textMargins.top());
-  const QRect source = event->rect().translated(-x(), -y());
-  p.drawPixmap(target, _backing, source);
-  p.setPen(QPen(_colorPalette->color("text/cursor", Qt::black), 2));
-  Q_FOREACH(Cursor *const cursor, _cursors) {
-    const quint32 yOff = cursor->row() * lineHeight + top + _textMargins.top();
-    const quint32 i = model()->offset(cursor->row());
-    const QString line = model()->read(i, model()->index(cursor));
-    const quint32 xOff = fontMetrics().width(line) + left + _textMargins.left();
-    p.drawLine(xOff, yOff, xOff, yOff + lineHeight);
-  }
-  
-  p.setPen(Qt::lightGray);
-  if(left > 0)   p.drawLine(-x() + left, -y(), -x() + left, -y() + height());
-  if(right > 0)  p.drawLine(width() + x() + right, -y(), x() + width() + right, -y() + height());
-  if(top > 0)    p.drawLine(-x(), -y() + top, width(), -y() + top);
-  if(bottom > 0) p.drawLine(-x(), -y() + bottom, -x() + width(), -y() + bottom);
-  
-  p.end();
-  
-  if(_marginsVisible) {
-    {
-      quint32 offset = 0;
-      Q_FOREACH(MarginView *const marginView, _marginViews[TextView::Left]) {
-        marginView->render(this, QPoint(-x() + offset, -y()), QRegion(), 0);
-        offset += marginView->width();
-      }
-    }
-    {
-      quint32 offset = 0;
-      Q_FOREACH(MarginView *const marginView, _marginViews[TextView::Right]) {
-        offset += marginView->width();
-        // marginView->render(this, QPoint(geometry().width() - offset, geometry().y()), QRegion(), 0);
-      }
-    }
-  }
+  QScrollArea::paintEvent(event);
 }
 
 void TextView::keyPressEvent(QKeyEvent *event)
@@ -391,6 +431,16 @@ const QList<ColorRegion> &TextView::contiguousColorRegions() const
   return _contiguousColorRegions;
 }
 
+const QPixmap &TextView::backing() const
+{
+  return _backing;
+}
+
+const QRect &TextView::internalGeometry() const
+{
+  return widget()->geometry();
+}
+
 void TextView::dirty(const QRect &region)
 {
   _dirty.append(region);
@@ -414,8 +464,6 @@ void TextView::renderOn(QPaintDevice *device)
     const quint32 line1 = r.y() / lineHeight;
     const quint32 line2 = line1 + r.height() / lineHeight + 1;
 
-    qDebug() << "line1" << line1 << "line2" << line2;
-
     // Fast forward to first line index
     quint32 curLine = 0;
     quint32 first = 0;
@@ -435,8 +483,6 @@ void TextView::renderOn(QPaintDevice *device)
         break;
       }
     }
-    
-    qDebug() << "Drawing" << first << "to" << last << "(size =" << _model->size() << ")";
 
     QList<ColorRegion>::const_iterator it = _contiguousColorRegions.begin();
   
@@ -457,13 +503,11 @@ void TextView::renderOn(QPaintDevice *device)
       p.setPen(c.color());
       quint32 begin = qMax(c.start(), first);
       const quint32 bound = qMin(c.end(), last);
-      qDebug() << _model->read(begin, bound);
       while(begin < bound) {
         qint32 end = _model->indexOf('\n', begin, c.end());
         const quint32 actualEnd = end < 0 ? c.end() : end + 1;
-        qDebug() << begin << "to" << actualEnd;
         const QString chunk = _model->read(begin, actualEnd);
-        p.drawText(xOff, line * lineHeight, width() - xOff, lineHeight,
+        p.drawText(xOff, line * lineHeight, widget()->width() - xOff, lineHeight,
           0, chunk);
         xOff += fontMetrics().width(chunk);
         if(end >= 0) {

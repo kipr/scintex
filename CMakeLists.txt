@@ -1,9 +1,7 @@
 project(scintex)
 
-cmake_minimum_required(VERSION 2.8.0)
-find_package(Qt4 REQUIRED)
-
-include(${QT_USE_FILE})
+cmake_minimum_required(VERSION 2.8.12)
+find_package(Qt5Widgets REQUIRED)
 
 set(INCLUDE ${CMAKE_SOURCE_DIR}/include)
 set(SRC ${CMAKE_SOURCE_DIR}/src)
@@ -18,17 +16,17 @@ file(GLOB_RECURSE DEMO_SOURCES ${DEMO_SRC}/*.cpp)
 set(SOURCES ${SOURCES})
 set(MOC_SOURCES ${INCLUDES})
 
-qt4_wrap_cpp(SOURCES ${MOC_SOURCES})
+qt5_wrap_cpp(SOURCES ${MOC_SOURCES})
 
 add_definitions(-Wall -g)
 
 if(APPLE)
-	link_directories(/Library/Frameworks/)
+  link_directories(/Library/Frameworks/)
 endif(APPLE)
 
 set(LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/lib)
 add_library(scintex SHARED ${SOURCES} ${INCLUDES})
-target_link_libraries(scintex ${QT_LIBRARIES})
+qt5_use_modules(scintex Widgets)
 
 link_directories(${scintex_SOURCE_DIR}/lib)
 
@@ -37,8 +35,9 @@ if(APPLE)
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -headerpad_max_install_names")
   add_custom_target(osx_install_names ALL 
     COMMAND sh ${OSX_INSTALL_NAMES_SCRIPT} ${LIBRARY_OUTPUT_PATH}/libscintex.dylib
-    QtCore.framework/Versions/4/QtCore
-    QtGui.framework/Versions/4/QtGui
+    QtCore.framework/Versions/5/QtCore
+    QtGui.framework/Versions/5/QtGui
+    QtWidgets.framework/Versions/5/QtWidgets
   WORKING_DIRECTORY ${LIBRARY_OUTPUT_PATH}
   DEPENDS scintex)
 endif()
@@ -54,4 +53,5 @@ else()
 endif()
 
 add_executable(scintex_demo ${DEMO_SOURCES})
+qt5_use_modules(scintex_demo Widgets)
 target_link_libraries(scintex_demo scintex)

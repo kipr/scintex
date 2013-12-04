@@ -38,15 +38,11 @@ int main(int argc, char *argv[])
   scintex::LineNumbersView *v = new scintex::LineNumbersView;
   v->setFont(QFont("Helvetica", 12));
   view.addMarginView(scintex::TextView::Left, v);
-  // view.addMarginView(scintex::TextView::Right, new scintex::ScrollOverviewView);
+  view.addMarginView(scintex::TextView::Right, new scintex::ScrollOverviewView);
   view.setColorRegions(QList<scintex::ColorRegion>() << scintex::ColorRegion(0, 100, Qt::green));
   
   QMainWindow w;
-  QScrollArea area;
-  w.setCentralWidget(&area);
-  
-  area.setWidgetResizable(true);
-  area.setWidget(&view);
+  w.setCentralWidget(&view);
   
   w.resize(640, 480);
   w.show();
