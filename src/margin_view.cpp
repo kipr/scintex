@@ -4,7 +4,7 @@ using namespace scintex;
 
 MarginView::MarginView()
   : _textView(0)
-  , _colorPalette(0)
+  , _stylePalette(0)
 {
 }
 
@@ -19,26 +19,26 @@ TextView *MarginView::textView() const
   return _textView;
 }
 
-void MarginView::setColorPalette(const ColorPalette *const colorPalette)
+void MarginView::setStylePalette(const StylePalette *const stylePalette)
 {
-  _colorPalette = colorPalette;
+  _stylePalette = stylePalette;
   if(isEngaged()) engaged();
 }
 
-const ColorPalette *MarginView::colorPalette() const
+const StylePalette *MarginView::stylePalette() const
 {
-  return _colorPalette;
+  return _stylePalette;
 }
 
 bool MarginView::isEngaged() const
 {
-  return _textView && _colorPalette;
+  return _textView && _stylePalette;
 }
 
 void MarginView::disengage()
 {
   setTextView(0);
-  setColorPalette(0);
+  setStylePalette(0);
 }
 
 void MarginView::engaged()

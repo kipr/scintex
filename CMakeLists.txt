@@ -21,11 +21,14 @@ qt5_wrap_cpp(SOURCES ${MOC_SOURCES})
 add_definitions(-Wall -g)
 
 if(APPLE)
+  include_directories(/usr/local/include)
+  link_directories(/usr/local/lib)
   link_directories(/Library/Frameworks/)
 endif(APPLE)
 
 set(LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/lib)
 add_library(scintex SHARED ${SOURCES} ${INCLUDES})
+target_link_libraries(scintex clang)
 qt5_use_modules(scintex Widgets)
 
 link_directories(${scintex_SOURCE_DIR}/lib)

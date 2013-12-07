@@ -4,6 +4,7 @@
 #include <QObject>
 
 class QKeyEvent;
+class QMouseEvent;
 
 namespace scintex
 {
@@ -18,8 +19,12 @@ namespace scintex
     void setTextView(TextView *const textView);
     TextView *textView() const;
     
-    virtual void pressed(QKeyEvent *const event) = 0;
-    virtual void released(QKeyEvent *const event) = 0;
+    virtual void keyPressed(QKeyEvent *const event) = 0;
+    virtual void keyReleased(QKeyEvent *const event) = 0;
+    
+    virtual void mousePressed(QMouseEvent *const event) = 0;
+    virtual void mouseMoved(QMouseEvent *const event) = 0;
+    virtual void mouseReleased(QMouseEvent *const event) = 0;
     
   private:
     TextView *_textView;

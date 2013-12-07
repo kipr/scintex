@@ -15,19 +15,15 @@ namespace scintex
     void setBacking(const QString &backing);
     
     virtual void create(const QString &str, const quint32 i);
-    virtual QString read(const quint32 i, const quint32 j) const;
+    virtual QString read(const Region &region) const;
     virtual void update(const QString &str, const quint32 i);
-    virtual void remove(const quint32 i, const quint32 j);
+    virtual void remove(const Region &region);
     virtual quint32 size() const;
     
-    virtual quint32 occurencesOf(const QChar c, const quint32 i, const quint32 j) const;
-    virtual qint32 indexOf(const QChar c, const quint32 i, const quint32 j) const;
+    virtual quint32 occurencesOf(const QChar c, const Region &region) const;
+    virtual qint32 indexOf(const QChar c, const Region &region) const;
     virtual quint32 charsUntil(const QChar c, const quint32 i) const;
     virtual quint32 charsPreceding(const QChar c, const quint32 i) const;
-    virtual quint32 line(const quint32 i) const;
-    virtual quint32 offset(const quint32 line) const;
-    
-    virtual quint32 index(const Cursor *const cursor) const;
     
   private:
     QString _backing;

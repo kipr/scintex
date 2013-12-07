@@ -1,19 +1,34 @@
 #include <scintex/cursor.hpp>
 
+#include <QDebug>
+
 using namespace scintex;
 
-Cursor::Cursor(QObject *const parent)
+Cursor::Cursor(const bool trackMouse, QObject *const parent)
   : QObject(parent)
   , _row(0)
   , _column(0)
+  , _trackMouse(trackMouse)
 {
 }
 
-Cursor::Cursor(const quint32 row, const quint32 column, QObject *const parent)
+Cursor::Cursor(const quint32 row, const quint32 column, const bool trackMouse,
+    QObject *const parent)
   : QObject(parent)
   , _row(row)
   , _column(column)
+  , _trackMouse(trackMouse)
 {
+}
+
+void Cursor::setTrackMouse(const bool trackMouse)
+{
+  _trackMouse = trackMouse;
+}
+
+bool Cursor::trackMouse() const
+{
+  return _trackMouse;
 }
 
 void Cursor::setRow(const quint32 row)

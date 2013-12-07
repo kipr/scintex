@@ -4,6 +4,8 @@
 #include <QObject>
 #include <QString>
 
+#include "region.hpp"
+
 namespace scintex
 {
   class Cursor;
@@ -15,24 +17,27 @@ namespace scintex
     virtual ~TextModel();
     // CRUD
     virtual void create(const QString &str, const quint32 i) = 0;
-    virtual QString read(const quint32 i, const quint32 j) const = 0;
+    virtual QString read(const Region &region) const = 0;
     virtual void update(const QString &str, const quint32 i) = 0;
-    virtual void remove(const quint32 i, const quint32 j) = 0;
+    virtual void remove(const Region &region) = 0;
     virtual quint32 size() const = 0;
     
-    virtual quint32 occurencesOf(const QChar c, const quint32 i, const quint32 j) const = 0;
-    virtual qint32 indexOf(const QChar c, const quint32 i, const quint32 j) const = 0;
+    virtual quint32 occurencesOf(const QChar c, const Region &region) const = 0;
+    virtual qint32 indexOf(const QChar c, const Region &region) const = 0;
     virtual quint32 charsUntil(const QChar c, const quint32 i) const = 0;
     virtual quint32 charsPreceding(const QChar c, const quint32 i) const = 0;
-    virtual quint32 line(const quint32 i) const = 0;
-    virtual quint32 offset(const quint32 line) const = 0;
     
-    virtual quint32 index(const Cursor *const cursor) const = 0;
+    virtual quint32 offset(const quint32 line) const;
+    virtual quint32 line(const quint32 i) const;
+    
+    virtual quint32 index(const Cursor *const cursor) const;
+    virtual void placeCursor(const quint32 index, Cursor *const cursor) const;
     
     quint32 lines() const;
+    Region fullRegion() const;
     
   Q_SIGNALS:
-    void updated(const quint32 i, const quint32 j);
+    void updated(const Region &region);
   };
 }
 

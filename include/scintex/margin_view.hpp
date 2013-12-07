@@ -6,7 +6,7 @@
 namespace scintex
 {
   class TextView;
-  class ColorPalette;
+  class StylePalette;
   
   class MarginView : public QWidget
   {
@@ -17,8 +17,8 @@ namespace scintex
     void setTextView(TextView *const textView);
     TextView *textView() const;
     
-    void setColorPalette(const ColorPalette *const colorPalette);
-    const ColorPalette *colorPalette() const;
+    void setStylePalette(const StylePalette *const stylePalette);
+    const StylePalette *stylePalette() const;
     
     bool isEngaged() const;
     void disengage();
@@ -31,7 +31,7 @@ namespace scintex
   private:
     quint32 _marginSize;
     TextView *_textView;
-    const ColorPalette *_colorPalette;
+    const StylePalette *_stylePalette;
   };
 }
 

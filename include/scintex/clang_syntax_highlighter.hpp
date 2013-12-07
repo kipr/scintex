@@ -8,11 +8,9 @@ namespace scintex
   class ClangSyntaxHighlighter : public SyntaxHighlighter
   {
   public:
-    virtual QList<ColorRegion> colorize(TextModel *const model) const;
-    virtual ColorPalette *createColorPalette() const;
-    
-  private:
-    
+    virtual QList<StyleRegion> stylize(TextModel *const model,
+      const StylePalette *const stylePalette) const;
+    virtual StylePalette *createStylePalette() const;
   };
 }
 

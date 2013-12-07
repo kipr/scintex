@@ -12,6 +12,7 @@ using namespace scintex;
 LineNumbersView::LineNumbersView()
   : _lines(0)
 {
+  // This is arbitrary.
   resize(10, 10);
 }
 
@@ -44,7 +45,7 @@ void LineNumbersView::fit()
 {
   if(!isEngaged()) return;
   const TextModel *const model = textView()->model();
-  const quint32 lines = model->occurencesOf('\n', 0, model->size()) + 1;
+  const quint32 lines = model->lines() + 1;
   fit(lines);
 }
 
@@ -54,7 +55,7 @@ void LineNumbersView::fit(const quint32 lines)
   
   if(_lines == lines) return;
   const TextView *const view = MarginView::textView();
-  const ColorPalette *const colorPalette = MarginView::colorPalette();
+  const StylePalette *const stylePalette = MarginView::stylePalette();
 
   const quint32 lineHeight = view->fontMetrics().height();
   

@@ -8,8 +8,14 @@ namespace scintex
   class BasicInputController : public InputController
   {
   public:
-    virtual void pressed(QKeyEvent *const event);
-    virtual void released(QKeyEvent *const event);
+    virtual void keyPressed(QKeyEvent *const event);
+    virtual void keyReleased(QKeyEvent *const event);
+    virtual void mousePressed(QMouseEvent *const event);
+    virtual void mouseMoved(QMouseEvent *const event);
+    virtual void mouseReleased(QMouseEvent *const event);
+    
+  private:
+    void placeCursors(const QPoint &pos);
   };
 }
 

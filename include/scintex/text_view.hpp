@@ -4,16 +4,18 @@
 #include <QScrollArea>
 #include <QPixmap>
 
-#include "color_region.hpp"
+#include "region.hpp"
+#include "style_region.hpp"
 
 namespace scintex
 {
   class TextModel;
   class MarginView;
-  class ColorPalette;
+  class StylePalette;
   class InputController;
   class Cursor;
   class TextViewport;
+  class SyntaxHighlighter;
   
   class TextView : public QScrollArea
   {
@@ -30,11 +32,11 @@ namespace scintex
     void setModel(TextModel *const model);
     TextModel *model() const;
     
-    Q_PROPERTY(ColorPalette *colorPalette
-      READ colorPalette
-      WRITE setColorPalette)
-    void setColorPalette(ColorPalette *const colorPalette);
-    ColorPalette *colorPalette() const;
+    Q_PROPERTY(StylePalette *stylePalette
+      READ stylePalette
+      WRITE setStylePalette)
+    void setStylePalette(StylePalette *const stylePalette);
+    StylePalette *stylePalette() const;
     
     enum Location {
       Top = 0,
@@ -62,38 +64,48 @@ namespace scintex
     void setCursors(const QList<Cursor *> &cursors);
     const QList<Cursor *> &cursors() const;
     
-    void setColorRegions(const QList<ColorRegion> &colorRegions);
-    const QList<ColorRegion> &colorRegions() const;
-    const QList<ColorRegion> &contiguousColorRegions() const;
+    void setSyntaxHighlighter(SyntaxHighlighter *const syntaxHighlighter);
+    SyntaxHighlighter *syntaxHighlighter() const;
+    
+    void setStyleRegions(const QList<StyleRegion> &styleRegions);
+    const QList<StyleRegion> &styleRegions() const;
+    const QList<StyleRegion> &contiguousStyleRegions() const;
     
     const QPixmap &backing() const;
     QPoint contentPosition() const;
+    
+    void setSelection(const Region &region);
+    void setSelection(const QList<Region> &selection);
+    const QList<Region> &selection() const;
+    
+    quint32 indexUnder(const QPoint &p) const;
+    
+    virtual void update();
     
   protected:
     virtual void changeEvent(QEvent *event);
     virtual void paintEvent(QPaintEvent *event);
     virtual void keyPressEvent(QKeyEvent *event);
     virtual void keyReleaseEvent(QKeyEvent *event);
-    virtual void mousePressEvent(QMouseEvent *event);
-    virtual void mouseReleaseEvent(QMouseEvent *event);
-    virtual void mouseMoveEvent(QMouseEvent *event);
     
   private Q_SLOTS:
     void fitMarginViews();
     virtual void updateDimensions();
     virtual void rehighlight();
     
-    virtual void invalidateRegion(const quint32 i, const quint32 j);
+    virtual void invalidateRegion(const Region &region);
   
   private:
-    void updateContiguousColorRegions();
+    void updateContiguousStyleRegions();
     void dirty(const QRect &region);
     void renderOn(QPaintDevice *device);
-    quint32 marginSize(const Location location);
+    quint32 marginSize(const Location location) const;
     quint32 computeHeight() const;
     quint32 computeWidth() const;
     
-    ColorPalette *_colorPalette;
+    QList<Region> _selection;
+    
+    StylePalette *_stylePalette;
     TextModel *_model;
     QList<MarginView *> _marginViews[4];
     bool _marginsVisible;
@@ -106,8 +118,10 @@ namespace scintex
     qint32 _selectionStart;
     qint32 _selectionEnd;
     
-    QList<ColorRegion> _colorRegions;
-    QList<ColorRegion> _contiguousColorRegions;
+    SyntaxHighlighter *_syntaxHighlighter;
+    
+    QList<StyleRegion> _styleRegions;
+    QList<StyleRegion> _contiguousStyleRegions;
   };
 }
 

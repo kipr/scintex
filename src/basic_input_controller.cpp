@@ -8,7 +8,7 @@
 
 using namespace scintex;
 
-void BasicInputController::pressed(QKeyEvent *const event)
+void BasicInputController::keyPressed(QKeyEvent *const event)
 {
   TextModel *const model = textView()->model();
   Q_FOREACH(Cursor *const cursor, textView()->cursors()) {
@@ -32,12 +32,13 @@ void BasicInputController::pressed(QKeyEvent *const event)
       cursor->setColumn(0);
     } else if(event->key() == Qt::Key_Backspace) {
       if(index > 0) {
-        const QString c = model->read(index - 1, index);
+        const Region r(index - 1, index);
+        const QString c = model->read(r);
         if(c == "\n") {
           cursor->up();
           cursor->setColumn(model->charsUntil('\n', model->index(cursor)));
         } else cursor->left();
-        model->remove(index - 1, index);
+        model->remove(r);
       }
     } else {
       model->create(event->text(), index);
@@ -48,7 +49,56 @@ void BasicInputController::pressed(QKeyEvent *const event)
   event->accept();
 }
 
-void BasicInputController::released(QKeyEvent *const event)
+void BasicInputController::keyReleased(QKeyEvent *const event)
 {
   event->accept();
+}
+
+void BasicInputController::mousePressed(QMouseEvent *const event)
+{
+  TextView *const v = textView();
+  const quint32 index = v->indexUnder(event->pos());
+  
+  if(event->modifiers() & Qt::ShiftModifier) {
+    quint32 min = index;
+    quint32 max = index;
+    Q_FOREACH(Cursor *const cursor, textView()->cursors()) {
+      if(!cursor->trackMouse()) continue;
+      const quint32 i = v->model()->index(cursor);
+      max = qMax(max, i);
+      min = qMin(min, i);
+    }
+    
+    v->setSelection(Region(min, max));
+  } else {
+    v->setSelection(Region());
+  }
+  
+  placeCursors(event->pos());
+  event->accept();
+}
+
+void BasicInputController::mouseMoved(QMouseEvent *const event)
+{
+  TextView *const v = textView();
+  QList<Region> selected = v->selection();
+  // selected.
+  placeCursors(event->pos());
+  // Region::coalesce();
+  event->accept();
+}
+
+void BasicInputController::mouseReleased(QMouseEvent *const event)
+{
+  event->accept();
+}
+
+void BasicInputController::placeCursors(const QPoint &pos)
+{
+  TextView *const v = textView();
+  const quint32 index = v->indexUnder(pos);
+  Q_FOREACH(Cursor *const cursor, textView()->cursors()) {
+    if(!cursor->trackMouse()) continue;
+    v->model()->placeCursor(index, cursor);
+  }
 }

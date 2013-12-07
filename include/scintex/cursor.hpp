@@ -9,8 +9,13 @@ namespace scintex
   {
   Q_OBJECT
   public:
-    Cursor(QObject *const parent = 0);
-    Cursor(const quint32 row, const quint32 column, QObject *const parent = 0);
+    Cursor(const bool trackMouse = false, QObject *const parent = 0);
+    Cursor(const quint32 row, const quint32 column, const bool trackMouse = false,
+      QObject *const parent = 0);
+    
+    Q_PROPERTY(bool trackMouse READ trackMouse WRITE setTrackMouse);
+    void setTrackMouse(const bool trackMouse);
+    bool trackMouse() const;
     
     void setRow(const quint32 row);
     void setColumn(const quint32 column);
@@ -29,6 +34,7 @@ namespace scintex
   private:
     quint32 _row;
     quint32 _column;
+    bool _trackMouse;
   };
 }
 

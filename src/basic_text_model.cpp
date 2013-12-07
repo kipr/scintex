@@ -18,38 +18,36 @@ const QString &BasicTextModel::backing() const
 void BasicTextModel::setBacking(const QString &backing)
 {
   _backing = backing;
-  Q_EMIT updated(0, _backing.size());
+  Q_EMIT updated(fullRegion());
 }
 
 void BasicTextModel::create(const QString &str, const quint32 i)
 {
   Q_ASSERT(i < _backing.size());
   _backing.insert(i, str);
-  Q_EMIT updated(i, _backing.size() - i);
+  Q_EMIT updated(Region(i, _backing.size() - i));
 }
 
-QString BasicTextModel::read(const quint32 i, const quint32 j) const
+QString BasicTextModel::read(const Region &region) const
 {
-  Q_ASSERT(i < _backing.size());
-  Q_ASSERT(j < _backing.size());
-  Q_ASSERT(j > i);
-  return _backing.mid(i, j - i);
+  Q_ASSERT(region.start() < _backing.size());
+  Q_ASSERT(region.end() < _backing.size());
+  return _backing.mid(region.start(), region.size());
 }
 
 void BasicTextModel::update(const QString &str, const quint32 i)
 {
   Q_ASSERT(i + str.size() < _backing.size());
   _backing.replace(i, str.size(), str);
-  Q_EMIT updated(i, i + str.size());
+  Q_EMIT updated(Region(i, i + str.size()));
 }
 
-void BasicTextModel::remove(const quint32 i, const quint32 j)
+void BasicTextModel::remove(const Region &region)
 {
-  Q_ASSERT(i < _backing.size());
-  Q_ASSERT(j < _backing.size());
-  Q_ASSERT(j > i);
-  _backing.remove(i, j - i);
-  Q_EMIT updated(i, _backing.size());
+  Q_ASSERT(region.start() < _backing.size());
+  Q_ASSERT(region.end() < _backing.size());
+  _backing.remove(region.start(), region.size());
+  Q_EMIT updated(Region(region.start(), _backing.size()));
 }
 
 quint32 BasicTextModel::size() const
@@ -57,23 +55,21 @@ quint32 BasicTextModel::size() const
   return _backing.size();
 }
 
-quint32 BasicTextModel::occurencesOf(const QChar c, const quint32 i, const quint32 j) const
+quint32 BasicTextModel::occurencesOf(const QChar c, const Region &region) const
 {
-  Q_ASSERT(i < _backing.size());
-  Q_ASSERT(j < _backing.size());
-  Q_ASSERT(j > i);
-  return _backing.midRef(i, j - i).count(c);
+  Q_ASSERT(region.start() < _backing.size());
+  Q_ASSERT(region.end() < _backing.size());
+  return _backing.midRef(region.start(), region.size()).count(c);
 }
 
-qint32 BasicTextModel::indexOf(const QChar c, const quint32 i, const quint32 j) const
+qint32 BasicTextModel::indexOf(const QChar c, const Region &region) const
 {
-  Q_ASSERT(i < _backing.size());
-  Q_ASSERT(j < _backing.size());
-  Q_ASSERT(j > i);
+  Q_ASSERT(region.start() < _backing.size());
+  Q_ASSERT(region.end() < _backing.size());
   
   // TODO: This unnecessarily scans past j
-  const qint32 res = _backing.indexOf(c, i);
-  if(res > j) return -1;
+  const qint32 res = _backing.indexOf(c, region.start());
+  if(res > region.end()) return -1;
   return res;
 }
 
@@ -93,23 +89,3 @@ quint32 BasicTextModel::charsPreceding(const QChar c, const quint32 i) const
   return i - j;
 }
 
-quint32 BasicTextModel::line(const quint32 i) const
-{
-  return occurencesOf('\n', 0, i);
-}
-
-quint32 BasicTextModel::offset(const quint32 line) const
-{
-  qint32 last = 0;
-  for(quint32 i = 0;
-    last >= 0 && line > i;
-    last = indexOf('\n', last, size()) + 1, ++i);
-  return last;
-}
-
-quint32 BasicTextModel::index(const Cursor *const cursor) const
-{
-  const quint32 off = offset(cursor->row());
-  quint32 c = qMin(charsUntil('\n', off), cursor->column());
-  return c + off;
-}
