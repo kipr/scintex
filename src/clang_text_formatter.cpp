@@ -15,21 +15,24 @@ struct Data
 {
   CXTranslationUnit unit;
   TextModel *model;
+  QList<Region> compounds;
 };
 
 static CXChildVisitResult visitor(CXCursor cur, CXCursor parent, CXClientData data)
 {
   Data *const d = reinterpret_cast<Data *>(data);
+  if(cur.kind != CXCursor_CompoundStmt) return CXChildVisit_Recurse;
+  Region r = cursorRegion(cur);
   
-  quint32 depth = 0;
-  CXCursor c = cur;
-  CXCursor root = clang_getTranslationUnitCursor(d->unit);
-  while(!clang_equalCursors(c, root)) {
-    c = clang_getCursorLexicalParent(c);
-    ++depth;
+  // Chop off '{' and '}'
+  if(r.size() >= 2) {
+    r.setStart(r.start() + 1);
+    r.setEnd(r.end() - 1);
   }
   
-  qDebug() << d->model->read(cursorRegion(cur)) << depth << cur.kind;
+  qDebug() << d->model->read(r);
+  
+  d->compounds << r;
   return CXChildVisit_Recurse;
 }
 
@@ -64,6 +67,23 @@ void ClangTextFormatter::format(TextModel *const model) const
   data.unit = unit;
   data.model = model;
   clang_visitChildren(cursor, &visitor, reinterpret_cast<void *>(&data));
+  
+  
+  const quint32 lines = model->lines();
+  for(quint32 i = 0; i < lines; ++i) {
+    quint32 offset = model->offset(i);
+    const Region r(offset, offset + 1);
+    quint32 depth = regionOverlap(r, data.compounds);
+    if(depth > 0) {
+      for(; r.end() < model->size();) {
+        const QString next = model->read(r);
+        if(next.trimmed().isEmpty()) model->remove(r);
+        else break;
+      }
+    }
+    
+    model->create(QString().fill(' ', depth * 2), offset);
+  }
   
   clang_disposeTranslationUnit(unit);
   clang_disposeIndex(index);

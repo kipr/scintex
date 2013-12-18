@@ -8,6 +8,7 @@ namespace scintex
 {
   Region rangeRegion(const CXSourceRange &range);
   Region cursorRegion(const CXCursor &cur);
+  quint32 regionOverlap(const Region &r, const QList<Region> &rs);
 }
 
 #endif

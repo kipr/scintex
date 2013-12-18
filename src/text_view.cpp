@@ -290,6 +290,7 @@ void TextView::setModel(TextModel *const model)
   invalidateRegion(model ? model->fullRegion() : Region());
   setStyleRegions(QList<StyleRegion>());
   setSelection(Region());
+  updateContiguousStyleRegions();
 }
 
 TextModel *TextView::model() const
@@ -603,7 +604,7 @@ void TextView::updateContiguousStyleRegions()
     quint32 step = 0;
     for(; it != _styleRegions.end(); ++it) {
       const StyleRegion c = *it;
-      qDebug() << "StyleRegion" << c.style().isItalic();
+
       if(step > c.region().start()) continue;
       if(step != c.region().start()) {
         const Region add(step, c.region().start());
