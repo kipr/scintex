@@ -20,12 +20,20 @@ namespace scintex
     void setItalic(const bool italic);
     bool isItalic() const;
     
+    void setUnderlineColor(const QColor &underlineColor);
+    const QColor &underlineColor() const;
+    
+    void setUnderline(const bool underline);
+    bool underline() const;
+    
     bool operator ==(const Style &rhs) const;
     
   private:
     QColor _color;
     bool _bold;
     bool _italic;
+    QColor _underlineColor;
+    bool _underline;
   };
 }
 

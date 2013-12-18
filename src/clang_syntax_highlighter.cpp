@@ -3,6 +3,8 @@
 #include <scintex/basic_style_palette.hpp>
 #include <clang-c/Index.h>
 
+#include "clang_shared.hpp"
+
 #include <QDir>
 #include <QFile>
 #include <QByteArray>
@@ -29,9 +31,9 @@ using namespace scintex;
 
 ClangStylePalette::ClangStylePalette()
 {
-  addRole("code/preprocessor/directive");
   addRole("code/preprocessor/definition");
   addRole("code/preprocessor/expansion");
+  addRole("code/preprocessor/include");
   addRole("code/literal/number");
   addRole("code/literal/string");
   addRole("code/literal/character");
@@ -50,7 +52,18 @@ ClangStylePalette::ClangStylePalette()
   addRole("code/reference/variable");
   addRole("code/comment");
   addRole("code/documentation");
-  addRole("code/statement");
+  addRole("code/statement/return");
+  addRole("code/statement/while");
+  addRole("code/statement/do");
+  addRole("code/statement/for");
+  addRole("code/statement/goto");
+  addRole("code/statement/indirect_goto");
+  addRole("code/statement/break");
+  addRole("code/statement/continue");
+  addRole("code/statement/switch");
+  addRole("code/statement/case");
+  addRole("code/statement/default_case");
+  addRole("code/statement/if");
   addRole("code/declaration/variable/type");
   addRole("code/declaration/variable/name");
   addRole("code/declaration/enum_constant");
@@ -65,7 +78,8 @@ ClangStylePalette::ClangStylePalette()
   addRole("code/declaration/struct");
   addRole("code/declaration/union/keyword");
   addRole("code/declaration/union/name");
-  addRole("code/declaration/parameter");
+  addRole("code/declaration/parameter/type");
+  addRole("code/declaration/parameter/name");
   addRole("code/declaration/function/return_type");
   addRole("code/declaration/function/name");
 }
@@ -180,26 +194,7 @@ struct Data
   QList<StyleRegion> *ret;
 };
 
-Region rangeRegion(const CXSourceRange &range)
-{
-  CXSourceLocation start = clang_getRangeStart(range);
-  unsigned startOffset = 0;
-  clang_getExpansionLocation(start, 0, 0, 0, &startOffset);
-  
-  CXSourceLocation end = clang_getRangeEnd(range);
-  unsigned endOffset = 0;
-  clang_getExpansionLocation(end, 0, 0, 0, &endOffset);
-  
-  return Region(startOffset, endOffset);
-}
-
-Region cursorRegion(const CXCursor &cur)
-{
-  const CXSourceRange range = clang_getCursorExtent(cur);
-  return rangeRegion(range);
-}
-
-Region next(const QString &str, const QRegExp &reg, int &i, const Region &r)
+static Region next(const QString &str, const QRegExp &reg, int &i, const Region &r)
 {
   if(i < 0 || (i = reg.indexIn(str, i)) < 0) return Region(0, 0);
   const Region ret(i + r.start(), i + r.start() + reg.matchedLength());
@@ -207,84 +202,107 @@ Region next(const QString &str, const QRegExp &reg, int &i, const Region &r)
   return ret;
 }
 
+static QList<StyleRegion> handleDecl(const QString &str, const QRegExp &reg, const Region &r,
+  const QString &first, const QString &second, TextModel *const model, const StylePalette *const p)
+{
+  QList<StyleRegion> ret;
+  int i = 0;
+  Region _1 = next(str, reg, i, r);
+  Region _2 = next(str, reg, i, r);
+  ret << StyleRegion(_1, p->style("code/declaration/" + first, Style()));
+  if(model->read(_2) != "{") {
+    ret << StyleRegion(_2, p->style("code/declaration/" + second, Style()));
+  }
+  return ret;
+}
+
 static CXChildVisitResult visitor(CXCursor cur, CXCursor parent, CXClientData data)
 {
-  Data *const d = (Data *)data;
-
   const Region r = cursorRegion(cur);
-  const QString str = d->model->read(r);
+  if(r.size() < 1 || clang_isPreprocessing(parent.kind)) return CXChildVisit_Continue;
   
-  const QRegExp word("\\w+");
+  Data *const d = (Data *)data;
+  const StylePalette *const p = d->palette;
+  TextModel *const m = d->model;
+  const QString s = m->read(r);
   
-  if(cur.kind == CXCursor_FunctionDecl) {
+  if(s.isEmpty()) return CXChildVisit_Continue;
+  
+  QList<StyleRegion> &ret = *d->ret;
+  const QRegExp id("\\w+");
+  
+  bool recurse = true;
+  
+  if(cur.kind == CXCursor_FunctionDecl) ret << handleDecl(s, id, r, "function/return_type",
+    "function/name", m, p);
+  else if(cur.kind == CXCursor_ClassDecl) ret << handleDecl(s, id, r, "class/keyword",
+    "class/name", m, p);
+  else if(cur.kind == CXCursor_StructDecl) ret << handleDecl(s, id, r, "struct/keyword",
+    "struct/name", m, p);
+  else if(cur.kind == CXCursor_VarDecl) ret << handleDecl(s, id, r, "variable/type",
+    "variable/name", m, p);
+  else if(cur.kind == CXCursor_UnionDecl) ret << handleDecl(s, id, r, "union/keyword",
+    "union/name", m, p);
+  else if(cur.kind == CXCursor_EnumDecl) ret << handleDecl(s, id, r, "enum/keyword",
+    "enum/name", m, p);
+  else if(cur.kind == CXCursor_FieldDecl) ret << handleDecl(s, id, r, "field/type",
+    "field/name", m, p);
+  else if(cur.kind == CXCursor_ParmDecl) ret << handleDecl(s, id, r, "parameter/type",
+    "parameter/name", m, p);
+  else if(cur.kind == CXCursor_IntegerLiteral || cur.kind == CXCursor_FloatingLiteral) {
+    ret << StyleRegion(r, p->style("code/literal/number"));
+  } else if(cur.kind == CXCursor_CharacterLiteral) {
+    ret << StyleRegion(r, p->style("code/literal/character"));
+  } else if(cur.kind == CXCursor_StringLiteral) {
+    ret << StyleRegion(r, p->style("code/literal/string"));
+  } else if(cur.kind == CXCursor_DeclRefExpr) {
+    ret << StyleRegion(r, p->style("code/reference/declaration"));
+  } else if(cur.kind == CXCursor_ReturnStmt) {
+    ret << StyleRegion(r, p->style("code/statement/return"));
+  } else if(cur.kind == CXCursor_IfStmt) {
+    ret << StyleRegion(r, p->style("code/statement/if"));
+  } else if(cur.kind == CXCursor_BreakStmt) {
+    ret << StyleRegion(r, p->style("code/statement/break"));
+  } else if(cur.kind == CXCursor_GotoStmt) {
+    ret << StyleRegion(r, p->style("code/statement/goto"));
+  } else if(cur.kind == CXCursor_ContinueStmt) {
+    ret << StyleRegion(r, p->style("code/statement/continue"));
+  } else if(cur.kind == CXCursor_WhileStmt) {
     int i = 0;
-    Region returnType = next(str, word, i, r);
-    Region name = next(str, word, i, r);
-    d->ret->append(StyleRegion(returnType, d->palette->style("code/declaration/function/return_type",
-      Style())));
-    if(d->model->read(name) != "{") {
-      d->ret->append(StyleRegion(name, d->palette->style("code/declaration/function/name",
-        Style())));
-    }
-  } else if(cur.kind == CXCursor_ClassDecl) {
+    Region _1 = next(s, id, i, r);
+    ret << StyleRegion(_1, p->style("code/statement/while"));
+  } else if(cur.kind == CXCursor_DoStmt) {
+    ret << StyleRegion(r, p->style("code/statement/do"));
+  } else if(cur.kind == CXCursor_IndirectGotoStmt) {
+    ret << StyleRegion(r, p->style("code/statement/indirect_goto"));
+  } else if(cur.kind == CXCursor_SwitchStmt) {
     int i = 0;
-    Region keyword  = next(str, word, i, r);
-    Region name = next(str, word, i, r);
-    d->ret->append(StyleRegion(keyword, d->palette->style("code/declaration/class/keyword",
-      Style())));
-    if(d->model->read(name) != "{") {
-      d->ret->append(StyleRegion(name, d->palette->style("code/declaration/class/name",
-        Style())));
-    }
-  } else if(cur.kind == CXCursor_StructDecl) {
+    Region _1 = next(s, id, i, r);
+    ret << StyleRegion(_1, p->style("code/statement/switch"));
+  } else if(cur.kind == CXCursor_ForStmt) {
     int i = 0;
-    Region keyword  = next(str, word, i, r);
-    Region name = next(str, word, i, r);
-    d->ret->append(StyleRegion(keyword, d->palette->style("code/declaration/struct/keyword",
-      Style())));
-    if(d->model->read(name) != "{") {
-      d->ret->append(StyleRegion(name, d->palette->style("code/declaration/struct/name",
-        Style())));
-    }
-  } else if(cur.kind == CXCursor_VarDecl) {
-    int i = 0;
-    Region type = next(str, word, i, r);
-    Region name = next(str, word, i, r);
-    d->ret->append(StyleRegion(type, d->palette->style("code/declaration/variable/type",
-      Style())));
-    d->ret->append(StyleRegion(name, d->palette->style("code/declaration/variable/name",
-      Style())));
-  } else if(cur.kind == CXCursor_UnionDecl) {
-    int i = 0;
-    Region type = next(str, word, i, r);
-    Region name = next(str, word, i, r);
-    d->ret->append(StyleRegion(type, d->palette->style("code/declaration/union/keyword",
-      Style())));
-    if(d->model->read(name) != "{") {
-      d->ret->append(StyleRegion(name, d->palette->style("code/declaration/union/name",
-        Style())));
-    }
-  } else if(cur.kind == CXCursor_EnumDecl) {
-    int i = 0;
-    Region type = next(str, word, i, r);
-    Region name = next(str, word, i, r);
-    d->ret->append(StyleRegion(type, d->palette->style("code/declaration/enum/keyword",
-      Style())));
-    if(d->model->read(name) != "{") {
-      d->ret->append(StyleRegion(name, d->palette->style("code/declaration/enum/name",
-        Style())));
-    }
-  } else if(cur.kind == CXCursor_FieldDecl) {
-    int i = 0;
-    Region type = next(str, word, i, r);
-    Region name = next(str, word, i, r);
-    d->ret->append(StyleRegion(type, d->palette->style("code/declaration/field/type",
-      Style())));
-    d->ret->append(StyleRegion(name, d->palette->style("code/declaration/field/name",
-      Style())));
+    Region _1 = next(s, id, i, r);
+    ret << StyleRegion(_1, p->style("code/statement/for"));
+  } else if(cur.kind == CXCursor_DefaultStmt) {
+    ret << StyleRegion(r, p->style("code/statement/default"));
+  } else if(cur.kind == CXCursor_ReturnStmt) {
+    Style s = p->style("code/statement/return");
+    s.setUnderline(true);
+    s.setUnderlineColor(Qt::black);
+    ret << StyleRegion(r, s);
+  } else if(cur.kind == CXCursor_MacroDefinition) {
+    qDebug() << "MACRO DEFINITION" << m->read(r);
+    ret << StyleRegion(r, p->style("code/preprocessor/definition"));
+    recurse = false;
+  } else if(cur.kind == CXCursor_MacroExpansion) {
+    ret << StyleRegion(r, p->style("code/preprocessor/expansion"));
+    recurse = false;
+  } else if(cur.kind == CXCursor_InclusionDirective) {
+    ret << StyleRegion(r, p->style("code/preprocessor/include"));
+    recurse = false;
+  } else {
+    qDebug() << "unhandled" << cur.kind << " " << m->read(cursorRegion(cur));
   }
-  
-  
   
   Region comment = rangeRegion(clang_Cursor_getCommentRange(cur));
   if(comment.size() > 0) {
@@ -293,7 +311,27 @@ static CXChildVisitResult visitor(CXCursor cur, CXCursor parent, CXClientData da
   }
   
   
-  return CXChildVisit_Recurse;
+  return recurse ? CXChildVisit_Recurse : CXChildVisit_Continue;
+}
+
+void ClangSyntaxHighlighter::setIncludes(const QStringList &includes)
+{
+  _includes = includes;
+}
+
+const QStringList &ClangSyntaxHighlighter::includes() const
+{
+  return _includes;
+}
+
+void ClangSyntaxHighlighter::setIncludeDirectories(const QStringList &includeDirectories)
+{
+  _includeDirectories = includeDirectories;
+}
+
+const QStringList &ClangSyntaxHighlighter::includeDirectories() const
+{
+  return _includeDirectories;
 }
 
 QList<StyleRegion> ClangSyntaxHighlighter::stylize(TextModel *const model,
@@ -301,6 +339,9 @@ QList<StyleRegion> ClangSyntaxHighlighter::stylize(TextModel *const model,
 {
   const ClangStylePalette *const ccp = dynamic_cast<const ClangStylePalette *>(stylePalette);
   
+  ////////////////////////////////////////
+  // PART 0 -- Create file to highlight //
+  ////////////////////////////////////////
   const QString path = QDir::temp().absoluteFilePath("highlight.cpp");
   QFile file(path);
   
@@ -310,25 +351,107 @@ QList<StyleRegion> ClangSyntaxHighlighter::stylize(TextModel *const model,
     return QList<StyleRegion>();
   }
   
-  file.write(model->read(model->fullRegion()).toUtf8());
+  const QString contents = model->read(model->fullRegion());
+  file.write(contents.toUtf8());
   file.close();
   
+  QString argString;
+  
+  Q_FOREACH(const QString &includeDirectory, _includeDirectories) {
+    argString += "-I\"" + includeDirectory + "\" ";
+  }
+  
+  Q_FOREACH(const QString &include, _includes) {
+    argString += "-include \"" + include + "\" ";
+  }
+  
+  const QStringList args = argString.trimmed().split(" ");
+  char **const argv = new char *[args.size() + 1];
   const QByteArray pathUtf = path.toUtf8();
-  const char *const argv[1] = { pathUtf.data() };
+  argv[0] = new char[pathUtf.size() + 1];
+  memcpy(argv[0], pathUtf.data(), pathUtf.size());
+  argv[0][pathUtf.size()] = 0;
+  for(quint32 i = 0; i < args.size(); ++i) {
+    const QByteArray arg = args[i].toUtf8().data();
+    argv[i + 1] = new char[arg.size() + 1];
+    memcpy(argv[i + 1], arg.data(), arg.size());
+    argv[i + 1][arg.size()] = 0;
+  }
+  
+
   CXIndex index = clang_createIndex(0, 0);
   CXTranslationUnit unit = clang_parseTranslationUnit(index, 0, 
-   argv, 1, 0, 0, CXTranslationUnit_None);
+   argv, args.size() + 1, 0, 0, CXTranslationUnit_None);
+  
+  for(quint32 i = 0; i < args.size() + 1; ++i) delete[] argv[i];
+  delete[] argv;
   
   CXCursor cursor = clang_getTranslationUnitCursor(unit);
   CXSourceRange sr = clang_getCursorExtent(cursor);
   
   QList<StyleRegion> ret;
+  
+  /////////////////////////////////////
+  // PART 1 -- Get comment locations //
+  /////////////////////////////////////
+  CXToken *tokens;
+  unsigned numTokens = 0;
+  clang_tokenize(unit, sr, &tokens, &numTokens);
+  for (int i = 0; i < numTokens; ++i) {
+    CXToken &tok = tokens[i];
+    const Region r = rangeRegion(clang_getTokenExtent(unit, tok));
+    
+    const CXTokenKind kind = clang_getTokenKind(tok);
+    Style c;
+    if(kind == CXToken_Comment) c = ccp->style("code/comment");
+    else continue;
+    
+    
+    if(c.color().isValid()) ret << StyleRegion(r, c);
+  }
+  
+  clang_disposeTokens(unit, tokens, numTokens);
+  
+  {
+    bool sawCont = false;
+    bool inPrep = false;
+    bool inString = false;
+    Region current;
+    for(quint32 i = 0; i < contents.size(); ++i) {
+      const QChar c = contents[i];
+      if(c == '\"' || c == '\'') {
+        if(contents[i - 1] != '\\') inString = !inString;
+      }
+      if(!inString && c == '#') {
+        inPrep = true;
+        current.setStart(i);
+      }
+      if(inPrep && c == '\\') sawCont = true;
+      if(inPrep && c == '\n') {
+        inPrep = sawCont;
+        sawCont = false;
+      
+        if(!inPrep) {
+          current.setEnd(i);
+          ret << StyleRegion(current, ccp->style("code/preprocessor/definition"));
+        }
+      }
+    }
+  }
+
+  ////////////////////////////
+  // PART 2 -- Traverse AST //
+  ////////////////////////////
   Data data;
   data.model = model;
   data.palette = ccp;
   data.ret = &ret;
   clang_visitChildren(clang_getTranslationUnitCursor(unit), &visitor, (void *)&data);
 
+
+  /////////////////////////////
+  // PART 2 -- Split regions //
+  /////////////////////////////
   split:
   qSort(ret.begin(), ret.end(), regionSize);
   for(size_t i = 0; i < ret.size(); ++i) {
@@ -359,7 +482,6 @@ QList<StyleRegion> ClangSyntaxHighlighter::stylize(TextModel *const model,
       }
     }
   }
-
   
   clang_disposeTranslationUnit(unit);
   clang_disposeIndex(index);

@@ -17,6 +17,7 @@ namespace scintex
   class InputController;
   class Cursor;
   class TextViewport;
+  class HighlightWorker;
   class SyntaxHighlighter;
   class HighlightWorker;
   class TextOperationHistoryManager;
@@ -26,6 +27,7 @@ namespace scintex
   Q_OBJECT
   public:
     friend class TextViewport;
+    friend class HighlightWorker;
     
     TextView(QWidget *const parent = 0);
     ~TextView();
@@ -107,6 +109,7 @@ namespace scintex
     virtual void invalidateRegion(const Region &region);
   
   private:
+    void _rehighlight();
     void updateContiguousStyleRegions();
     void dirty(const QRect &region);
     void renderOn(QPaintDevice *device);

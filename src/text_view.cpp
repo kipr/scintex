@@ -217,8 +217,13 @@ void HighlightWorker::run()
     TextModel *const m = _textView->model();
     StylePalette *const s = _textView->stylePalette();
     if(!sh || !m || !s) continue;
-    const QList<StyleRegion> styleRegions = sh->stylize(m, s);
-    _textView->setStyleRegions(styleRegions);
+    
+    QList<StyleRegion> styleRegions = sh->stylize(m, s);
+    qSort(styleRegions);
+    _textView->_drawMutex.lock();
+    _textView->_styleRegions = styleRegions;
+    _textView->_drawMutex.unlock();
+    _textView->updateContiguousStyleRegions();
     _mut.unlock();
   }
 }
@@ -254,8 +259,9 @@ TextView::TextView(QWidget *const parent)
   setWidgetResizable(true);
   updateDimensions();
   _highlightWorker->setAutoDelete(true);
+  _highlightTimer.setSingleShot(true);
   QThreadPool::globalInstance()->start(_highlightWorker);
-  connect(&_highlightTimer, &QTimer::timeout, _highlightWorker, &HighlightWorker::highlight);
+  connect(&_highlightTimer, &QTimer::timeout, this, &TextView::_rehighlight);
 }
 
 TextView::~TextView()
@@ -380,14 +386,12 @@ void TextView::updateDimensions()
   _backing = QPixmap(textWidth * dpr, textHeight * dpr);
 
   _backing.setDevicePixelRatio(dpr);
-  dirty(QRect(0, 0, _backing.width(), _backing.height()));
+  dirty(QRect());
 }
 
 void TextView::rehighlight()
 {
-  _highlightTimer.start(300);
-  updateContiguousStyleRegions();
-  dirty(QRect(0, 0, _backing.width(), _backing.height()));
+  _highlightTimer.start(200);
 }
 
 void TextView::invalidateRegion(const Region &region)
@@ -399,7 +403,7 @@ void TextView::invalidateRegion(const Region &region)
   const quint32 yOff = lines * lineHeight;
   const quint32 height = invalidSize * lineHeight;
   
-  qDebug() << "Invalidate" << region;
+  // qDebug() << "Invalidate" << region;
 
   dirty(QRect(0, yOff, width(), height));
 }
@@ -446,10 +450,10 @@ void TextView::sizeChanged(const Region &newRegion, const Region &oldRegion)
   for(; it != _styleRegions.end(); ++it) {
     StyleRegion &sr = *it;
     Region r = sr.region();
-    if(oldRegion.start() > r.start() && oldRegion.end() < r.end()) {
+    if(r.contains(oldRegion)) {
       if(shift < 0 && -shift > r.end()) r.setEnd(0);
       else r.setEnd(r.end() + shift);
-    } else if(r.end() >= oldRegion.start()) {
+    } else if(r.end() >= oldRegion.end()) {
       r = r.shift(shift);
     }
     sr.setRegion(r);
@@ -587,9 +591,9 @@ void TextView::updateContiguousStyleRegions()
   
   if(!_model) return;
   
-  const QColor textBase = _stylePalette
-    ? _stylePalette->style("text/base", Style(Qt::black)).color()
-    : QColor(Qt::black);
+  const Style textBase = _stylePalette
+    ? _stylePalette->style("text/base", Style(Qt::black))
+    : Style(QColor(Qt::black));
   
   _drawMutex.lock();
   if(_styleRegions.isEmpty()) {
@@ -598,7 +602,8 @@ void TextView::updateContiguousStyleRegions()
     QList<StyleRegion>::const_iterator it = _styleRegions.begin();
     quint32 step = 0;
     for(; it != _styleRegions.end(); ++it) {
-      const StyleRegion &c = *it;
+      const StyleRegion c = *it;
+      qDebug() << "StyleRegion" << c.style().isItalic();
       if(step > c.region().start()) continue;
       if(step != c.region().start()) {
         const Region add(step, c.region().start());
@@ -615,7 +620,7 @@ void TextView::updateContiguousStyleRegions()
   _drawMutex.unlock();
   
   // TODO: Make less naive
-  dirty(QRect(0, 0, _backing.width(), _backing.height()));
+  dirty(QRect());
 }
 
 void TextView::setStyleRegions(const QList<StyleRegion> &styleRegions)
@@ -717,7 +722,8 @@ quint32 TextView::indexUnder(const QPoint &p) const
 
 void TextView::dirty(const QRect &region)
 {
-  _dirty.append(region);
+  if(region.isNull()) _dirty.append(QRect(0, 0, _backing.width(), _backing.height()));
+  else _dirty.append(region);
   renderOn(&_backing);
   widget()->update();
 }
@@ -798,8 +804,15 @@ void TextView::renderOn(QPaintDevice *device)
         const QString chunk = _model->read(cr);
         
         if(!chunk.trimmed().isEmpty()) {
+          QRect bounding;
           p.drawText(xOff, line * lineHeight, widget()->width() - xOff, lineHeight,
-            0, chunk);
+            0, chunk, &bounding);
+          if(st.underline()) {
+            p.save();
+            p.setPen(st.underlineColor());
+            p.drawLine(bounding.bottomLeft(), bounding.bottomRight());
+            p.restore();
+          }
         }
         xOff += fontMetrics().width(chunk);
         if(end >= 0) {
@@ -819,4 +832,9 @@ void TextView::update()
 {
   widget()->update();
   QScrollArea::update();
+}
+
+void TextView::_rehighlight()
+{
+  _highlightWorker->highlight();
 }

@@ -1,11 +1,13 @@
 #include <scintex/style.hpp>
 
+#include <QDebug>
+
 using namespace scintex;
 
 Style::Style()
-  : _color()
-  , _bold(false)
+  : _bold(false)
   , _italic(false)
+  , _underline(false)
 {
 }
 
@@ -13,6 +15,7 @@ Style::Style(const QColor &color, const bool bold, const bool italic)
   : _color(color)
   , _bold(bold)
   , _italic(italic)
+  , _underline(false)
 {
 }
 
@@ -46,7 +49,28 @@ bool Style::isItalic() const
   return _italic;
 }
 
+void Style::setUnderlineColor(const QColor &underlineColor)
+{
+  _underlineColor = underlineColor;
+}
+
+const QColor &Style::underlineColor() const
+{
+  return _underlineColor;
+}
+
+void Style::setUnderline(const bool underline)
+{
+  _underline = underline;
+}
+
+bool Style::underline() const
+{
+  return _underline;
+}
+
 bool Style::operator ==(const Style &rhs) const
 {
-  return _color == rhs._color && _bold == rhs._bold && _italic && rhs._italic;
+  return _color == rhs._color && _bold == rhs._bold && _italic == rhs._italic
+    && _underline == rhs._underline && _underlineColor == rhs._underlineColor;
 }

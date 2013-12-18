@@ -25,6 +25,8 @@ namespace scintex
     
     Region shift(const qint32 offset) const;
     
+    bool contains(const Region &r) const;
+    
     QList<Region> intersect(const Region &region) const;
     
     static QList<Region> coalesce(QList<Region> regions);

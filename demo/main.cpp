@@ -41,15 +41,21 @@ int main(int argc, char *argv[])
   Q_FOREACH(const QString &role, cp->roles()) {
     if(!role.startsWith("code/")) continue;
     qDebug() << role << "->" << QColor::fromHsvF(h / 360.0, 1.0, 1.0);
-    cp->setStyle(role, scintex::Style(QColor::fromHsvF(h / 360.0, s, 1.0), false, true));
-    h += 10.0;
-    if(h > 360.0) {
-      h -= 360.0;
-      s -= 0.1;
+    if(role.startsWith("code/declaration") && (role.endsWith("type") || role.endsWith("keyword"))) {
+      cp->setStyle(role, scintex::Style(Qt::blue, false, true));
+      continue;
     }
   }
   
-  view.stylePalette()->setStyle("code/keyword", scintex::Style(Qt::blue, true));
+  cp->setStyle("code/declaration", scintex::Style(Qt::black, false, false));
+  cp->setStyle("code/reference", scintex::Style("#020202", false, false));
+  cp->setStyle("code/statement", scintex::Style(Qt::blue, false, true));
+  cp->setStyle("code/literal/string", scintex::Style("red", false, false));
+  cp->setStyle("code/literal/number", scintex::Style("orange", false, false));
+  cp->setStyle("code/literal/number", scintex::Style("orange", false, false));
+  cp->setStyle("code/comment", scintex::Style(Qt::gray, false, false));
+  cp->setStyle("code/documentation", scintex::Style(Qt::gray, false, false));
+  cp->setStyle("code/preprocessor", scintex::Style(Qt::green, false, false));
   
   view.addCursor(new scintex::Cursor(true));
   view.setTextMargins(QMargins(5, 5, 5, 5));
