@@ -1,0 +1,17 @@
+option(test "Build all tests." OFF)
+
+function(define_test TEST_NAME TEST_LOCATION)
+    qt5_wrap_cpp(MOC ${TEST_LOCATION})
+    add_executable(test_${TEST_NAME} ${TEST_LOCATION})
+    target_link_libraries(test_${TEST_NAME} scintex)
+    add_test(NAME test_${TEST_NAME} COMMAND ${CMAKE_CURRENT_BINARY_DIR}/test_${TEST_NAME})
+    qt5_use_modules(test_${TEST_NAME} Widgets Test)
+    message(${CMAKE_CURRENT_BINARY_DIR}/test_${TEST_NAME})
+endfunction(define_test)
+
+if (test)
+  find_package(Qt5Test REQUIRED)
+  set(CUR "${CMAKE_CURRENT_SOURCE_DIR}")
+  add_definitions("-I${CMAKE_CURRENT_BINARY_DIR}")
+  define_test(linear_text_operation_history "${CUR}/linear_text_operation_history.cpp")
+endif (test)

@@ -3,6 +3,9 @@
 using namespace scintex;
 
 Style::Style()
+  : _color()
+  , _bold(false)
+  , _italic(false)
 {
 }
 

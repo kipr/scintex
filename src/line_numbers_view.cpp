@@ -30,9 +30,8 @@ void LineNumbersView::paintEvent(QPaintEvent *event)
   const TextView *const view = MarginView::textView();
   QPainter p(this);
 
-  const qreal dpr = _backing.devicePixelRatio();
   const QRect target(0, view->textMargins().top()
-    + view->contentPosition().y() * dpr, width(), height());
+    + view->contentPosition().y(), width(), height());
   const QRect source(0, 0, _backing.width(), _backing.height());
   p.drawPixmap(target, _backing, source);
 }
@@ -60,7 +59,7 @@ void LineNumbersView::fit(const quint32 lines)
   const quint32 lineHeight = view->fontMetrics().height();
   
   const qreal dpr = devicePixelRatio();
-  _backing = QPixmap((fontMetrics().width(QString::number(actual)) + 10) * dpr,
+  _backing = QPixmap((fontMetrics().width(QString::number(actual))) * 2 * dpr,
     textView()->backing().height());
   _backing.setDevicePixelRatio(dpr);
   resize(_backing.width() / dpr, _backing.height() / dpr);

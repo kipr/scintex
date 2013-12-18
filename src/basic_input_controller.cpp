@@ -2,50 +2,84 @@
 #include <scintex/text_view.hpp>
 #include <scintex/text_model.hpp>
 #include <scintex/cursor.hpp>
+#include <scintex/linear_text_operation_history.hpp>
+#include <scintex/clang_text_formatter.hpp>
+#include <scintex/text_operation_history_manager.hpp>
 
 #include <QDebug>
 #include <QKeyEvent>
 
 using namespace scintex;
 
+BasicInputController::BasicInputController()
+{
+}
+
+BasicInputController::~BasicInputController()
+{
+  flushState();
+}
+
+void BasicInputController::flushState()
+{
+  
+}
+
 void BasicInputController::keyPressed(QKeyEvent *const event)
 {
   TextModel *const model = textView()->model();
+  
+  const Qt::KeyboardModifiers m = event->modifiers();
+  const int k = event->key();
+  
+  if(m & Qt::ControlModifier) {
+    if(m & Qt::ShiftModifier && k == Qt::Key_Z) {
+          textView()->historyManager()->redo(model);
+    } else if(k == Qt::Key_Z) {
+      textView()->historyManager()->undo(model);
+    } else if(k == Qt::Key_I) {
+      ClangTextFormatter formatter;
+      formatter.format(model);
+    }
+    goto done;
+  }
+  
   Q_FOREACH(Cursor *const cursor, textView()->cursors()) {
     const quint32 index = model->index(cursor);
     
-    if(event->key() == Qt::Key_Up) {
+    if(k == Qt::Key_Up) {
       cursor->up();
       if(index == model->index(cursor)) cursor->down();
-    } else if(event->key() == Qt::Key_Down) {
+    } else if(k == Qt::Key_Down) {
       cursor->down();
       if(index == model->index(cursor)) cursor->up();
-    } else if(event->key() == Qt::Key_Right) {
-      cursor->right();
-      if(index == model->index(cursor)) cursor->left();
-    } else if(event->key() == Qt::Key_Left) {
-      cursor->left();
-      if(index == model->index(cursor)) cursor->right();
-    } else if(event->key() == Qt::Key_Enter || event->key() == Qt::Key_Return) {
-      model->create("\n", index);
+    } else if(k == Qt::Key_Right && model->size() > 0 && index < model->size() - 1) {
+      model->placeCursor(index + 1, cursor);
+    } else if(k == Qt::Key_Left && index > 0) {
+      model->placeCursor(index - 1, cursor);
+    } else if(k == Qt::Key_Enter || k == Qt::Key_Return) {
+      const TextOperation op = model->create("\n", index);
+      textView()->historyManager()->addOperation(cursor, &op);
       cursor->down();
       cursor->setColumn(0);
-    } else if(event->key() == Qt::Key_Backspace) {
+    } else if(k == Qt::Key_Backspace) {
       if(index > 0) {
         const Region r(index - 1, index);
-        const QString c = model->read(r);
-        if(c == "\n") {
+        if(model->read(r) == "\n") {
           cursor->up();
           cursor->setColumn(model->charsUntil('\n', model->index(cursor)));
         } else cursor->left();
-        model->remove(r);
+        const TextOperation op = model->remove(r);
+        textView()->historyManager()->addOperation(cursor, &op);
       }
     } else {
-      model->create(event->text(), index);
+      const TextOperation op = model->create(event->text(), index);
+      textView()->historyManager()->addOperation(cursor, &op);
       cursor->right(event->text().size());
     }
   }
   
+  done:
   event->accept();
 }
 
@@ -82,9 +116,9 @@ void BasicInputController::mouseMoved(QMouseEvent *const event)
 {
   TextView *const v = textView();
   QList<Region> selected = v->selection();
-  // selected.
-  placeCursors(event->pos());
-  // Region::coalesce();
+  QList<Region> movementRegions = placeCursors(event->pos());
+  v->setSelection(Region::intersect(selected, movementRegions));
+  qDebug() << "Selection size:" << v->selection().size();
   event->accept();
 }
 
@@ -93,12 +127,17 @@ void BasicInputController::mouseReleased(QMouseEvent *const event)
   event->accept();
 }
 
-void BasicInputController::placeCursors(const QPoint &pos)
+QList<Region> BasicInputController::placeCursors(const QPoint &pos)
 {
   TextView *const v = textView();
   const quint32 index = v->indexUnder(pos);
+  QList<Region> ret;
   Q_FOREACH(Cursor *const cursor, textView()->cursors()) {
     if(!cursor->trackMouse()) continue;
+    const quint32 old = v->model()->index(cursor);
     v->model()->placeCursor(index, cursor);
+    ret.append(Region(qMin(old, index), qMax(old, index)));
   }
+  return ret;
 }
+

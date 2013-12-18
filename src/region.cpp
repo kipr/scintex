@@ -51,6 +51,34 @@ Region Region::right(const quint32 end) const
   return Region(_end, end);
 }
 
+Region Region::shift(const qint32 offset) const
+{
+  const qint32 start = _start + offset;
+  const qint32 end = _end + offset;
+  return Region(start < 0 ? 0 : start, end < 0 ? 0 : end);
+}
+
+QList<Region> Region::intersect(const Region &region) const
+{
+  // No intersection, no split
+  if(_start >= region.end() || _end < region.start()) {
+    return QList<Region>() << *this;
+  }
+  
+  // Sort points and create 3 regions
+  QList<int> points;
+  points << _start << _end << region.start() << region.end();
+  qSort(points);
+  
+  const Region left   = Region(points[0], points[1]);
+  const Region middle = Region(points[1], points[2]);
+  const Region right  = Region(points[2], points[3]);
+  
+  QList<Region> ret;
+  ret << left << middle << right;
+  return ret;
+}
+
 QList<Region> Region::coalesce(QList<Region> regions)
 {
   if(regions.isEmpty()) return QList<Region>();
@@ -70,7 +98,35 @@ QList<Region> Region::coalesce(QList<Region> regions)
   return regions;
 }
 
+QList<Region> Region::intersect(const QList<Region> &a, const QList<Region> &b)
+{
+  QList<Region> ret;
+  QList<Region>::const_iterator ait = a.begin();
+  QList<Region>::const_iterator bit = b.begin();
+  for(; bit != b.end(); ++bit) {
+    for(; ait != a.end(); ++ait) {
+      const QList<Region> regions = (*ait).intersect(*bit);
+      if(regions.size() == 1) {
+        ret << regions[0] << *bit;
+        continue;
+      }
+      QList<Region>::const_iterator rit = regions.begin();
+      for(quint32 i = 0; rit != regions.end(); ++rit, ++i) {
+        if(i % 2 || (*rit).size() < 1) continue;
+        ret << *rit;
+      }
+    }
+  }
+  
+  return ret;
+}
+
 bool Region::operator <(const Region &rhs) const
 {
   return _start < rhs._start;
+}
+
+bool Region::operator ==(const Region &rhs) const
+{
+  return _start == rhs._start && _end == rhs._end;
 }

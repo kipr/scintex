@@ -41,13 +41,15 @@ int main(int argc, char *argv[])
   Q_FOREACH(const QString &role, cp->roles()) {
     if(!role.startsWith("code/")) continue;
     qDebug() << role << "->" << QColor::fromHsvF(h / 360.0, 1.0, 1.0);
-    cp->setStyle(role, scintex::Style(QColor::fromHsvF(h / 360.0, s, 1.0)));
-    h += 30.0;
+    cp->setStyle(role, scintex::Style(QColor::fromHsvF(h / 360.0, s, 1.0), false, true));
+    h += 10.0;
     if(h > 360.0) {
       h -= 360.0;
       s -= 0.1;
     }
   }
+  
+  view.stylePalette()->setStyle("code/keyword", scintex::Style(Qt::blue, true));
   
   view.addCursor(new scintex::Cursor(true));
   view.setTextMargins(QMargins(5, 5, 5, 5));

@@ -5,6 +5,7 @@
 #include <QString>
 
 #include "region.hpp"
+#include "text_operation.hpp"
 
 namespace scintex
 {
@@ -15,11 +16,12 @@ namespace scintex
   Q_OBJECT
   public:
     virtual ~TextModel();
+    
     // CRUD
-    virtual void create(const QString &str, const quint32 i) = 0;
+    TextOperation create(const QString &str, const quint32 i);
     virtual QString read(const Region &region) const = 0;
-    virtual void update(const QString &str, const quint32 i) = 0;
-    virtual void remove(const Region &region) = 0;
+    TextOperation update(const QString &str, const quint32 i);
+    TextOperation remove(const Region &region);
     virtual quint32 size() const = 0;
     
     virtual quint32 occurencesOf(const QChar c, const Region &region) const = 0;
@@ -36,8 +38,16 @@ namespace scintex
     quint32 lines() const;
     Region fullRegion() const;
     
+    QList<TextOperation> removePattern(const QRegExp &regex);
+    
   Q_SIGNALS:
     void updated(const Region &region);
+    void sizeChanged(const Region &newRegion, const Region &oldRegion);
+    
+  protected:
+    virtual TextOperation _create(const QString &str, const quint32 i) = 0;
+    virtual TextOperation _update(const QString &str, const quint32 i) = 0;
+    virtual TextOperation _remove(const Region &region) = 0;
   };
 }
 

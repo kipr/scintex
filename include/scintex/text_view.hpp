@@ -3,6 +3,8 @@
 
 #include <QScrollArea>
 #include <QPixmap>
+#include <QTimer>
+#include <QMutex>
 
 #include "region.hpp"
 #include "style_region.hpp"
@@ -16,6 +18,8 @@ namespace scintex
   class Cursor;
   class TextViewport;
   class SyntaxHighlighter;
+  class HighlightWorker;
+  class TextOperationHistoryManager;
   
   class TextView : public QScrollArea
   {
@@ -78,6 +82,12 @@ namespace scintex
     void setSelection(const QList<Region> &selection);
     const QList<Region> &selection() const;
     
+    Q_PROPERTY(TextOperationHistoryManager *historyManager
+      READ historyManager
+      WRITE setHistoryManager)
+    void setHistoryManager(TextOperationHistoryManager *const historyManager);
+    TextOperationHistoryManager *historyManager() const;
+    
     quint32 indexUnder(const QPoint &p) const;
     
     virtual void update();
@@ -89,6 +99,7 @@ namespace scintex
     virtual void keyReleaseEvent(QKeyEvent *event);
     
   private Q_SLOTS:
+    virtual void sizeChanged(const Region &newRegion, const Region &oldRegion);
     void fitMarginViews();
     virtual void updateDimensions();
     virtual void rehighlight();
@@ -122,6 +133,12 @@ namespace scintex
     
     QList<StyleRegion> _styleRegions;
     QList<StyleRegion> _contiguousStyleRegions;
+    
+    QTimer _highlightTimer;
+    HighlightWorker *_highlightWorker;
+    QMutex _drawMutex;
+    
+    TextOperationHistoryManager *_historyManager;
   };
 }
 

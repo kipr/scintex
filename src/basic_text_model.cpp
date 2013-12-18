@@ -5,8 +5,14 @@
 
 using namespace scintex;
 
+
+
 BasicTextModel::BasicTextModel(const QString &text)
   : _backing(text)
+{
+}
+
+BasicTextModel::~BasicTextModel()
 {
 }
 
@@ -21,11 +27,11 @@ void BasicTextModel::setBacking(const QString &backing)
   Q_EMIT updated(fullRegion());
 }
 
-void BasicTextModel::create(const QString &str, const quint32 i)
+TextOperation BasicTextModel::_create(const QString &str, const quint32 i)
 {
   Q_ASSERT(i < _backing.size());
   _backing.insert(i, str);
-  Q_EMIT updated(Region(i, _backing.size() - i));
+  return TextOperation(Region(i, i), QString(), Region(i, i + str.size()), str);
 }
 
 QString BasicTextModel::read(const Region &region) const
@@ -35,19 +41,22 @@ QString BasicTextModel::read(const Region &region) const
   return _backing.mid(region.start(), region.size());
 }
 
-void BasicTextModel::update(const QString &str, const quint32 i)
+TextOperation BasicTextModel::_update(const QString &str, const quint32 i)
 {
   Q_ASSERT(i + str.size() < _backing.size());
+  const Region update(i, i + str.size());
+  const QString before = _backing.mid(update.start(), update.size());
   _backing.replace(i, str.size(), str);
-  Q_EMIT updated(Region(i, i + str.size()));
+  return TextOperation(update, before, update, str);
 }
 
-void BasicTextModel::remove(const Region &region)
+TextOperation BasicTextModel::_remove(const Region &region)
 {
   Q_ASSERT(region.start() < _backing.size());
   Q_ASSERT(region.end() < _backing.size());
+  const QString before = _backing.mid(region.start(), region.size());
   _backing.remove(region.start(), region.size());
-  Q_EMIT updated(Region(region.start(), _backing.size()));
+  return TextOperation(region, before, Region(region.start(), region.start()), QString());
 }
 
 quint32 BasicTextModel::size() const
@@ -87,5 +96,11 @@ quint32 BasicTextModel::charsPreceding(const QChar c, const quint32 i) const
   qint32 j = _backing.lastIndexOf(c, i);
   if(j < 0) j = 0;
   return i - j;
+}
+
+static QDebug &operator <<(QDebug &stream, const Region &r)
+{
+  stream << "(" << r.start() << "to" << r.end() << ")";
+  return stream;
 }
 

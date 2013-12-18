@@ -19,6 +19,8 @@ namespace scintex
     void setTextView(TextView *const textView);
     TextView *textView() const;
     
+    virtual void flushState() = 0;
+    
     virtual void keyPressed(QKeyEvent *const event) = 0;
     virtual void keyReleased(QKeyEvent *const event) = 0;
     

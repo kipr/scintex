@@ -13,10 +13,7 @@ file(GLOB INCLUDES ${INCLUDE}/scintex/*.hpp)
 file(GLOB SOURCES ${SRC}/*.cpp)
 file(GLOB_RECURSE DEMO_SOURCES ${DEMO_SRC}/*.cpp)
 
-set(SOURCES ${SOURCES})
-set(MOC_SOURCES ${INCLUDES})
-
-qt5_wrap_cpp(SOURCES ${MOC_SOURCES})
+set(CMAKE_AUTOMOC ON)
 
 add_definitions(-Wall -g)
 
@@ -58,3 +55,6 @@ endif()
 add_executable(scintex_demo ${DEMO_SOURCES})
 qt5_use_modules(scintex_demo Widgets)
 target_link_libraries(scintex_demo scintex)
+
+enable_testing()
+add_subdirectory(test)

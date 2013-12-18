@@ -5,12 +5,18 @@
 #include <scintex/margin_view.hpp>
 #include <scintex/cursor.hpp>
 #include <scintex/syntax_highlighter.hpp>
+#include <scintex/text_operation_history_manager.hpp>
 
 #include <QPainter>
 #include <QEvent>
 #include <QPaintEvent>
 #include <QMouseEvent>
+#include <QRunnable>
 #include <QDebug>
+#include <QThread>
+#include <QThreadPool>
+#include <QRunnable>
+#include <QWaitCondition>
 
 using namespace scintex;
 
@@ -27,6 +33,21 @@ namespace scintex
     void mousePressEvent(QMouseEvent *event);
   private:
     TextView *const _tv;
+  };
+  
+  class HighlightWorker : public QRunnable, public QObject
+  {
+  public:
+    HighlightWorker(TextView *const textView);
+    virtual void run();
+    virtual void highlight();
+    virtual void exit();
+    
+  private:
+    QMutex _mut;
+    TextView *const _textView;
+    QWaitCondition _highlight;
+    bool _exit;
   };
 }
 
@@ -46,6 +67,8 @@ TextViewport::TextViewport(TextView *const parent)
 void TextViewport::paintEvent(QPaintEvent *event)
 {
   TextView *const v = _tv;
+  v->_drawMutex.lock();
+  
   bool mvis = v->_marginsVisible;
   
   qint32 left = 0;
@@ -83,7 +106,8 @@ void TextViewport::paintEvent(QPaintEvent *event)
   p.setPen(QPen(cp->style("text/cursor", Style(Qt::black)).color(), 2));
   
   Q_FOREACH(Cursor *const cursor, v->_cursors) {
-    const quint32 yOff = cursor->row() * lineHeight + top + tm.top();
+    quint32 yOff = cursor->row() * lineHeight + top + tm.top() + y();
+    // TODO: Make cursor obey margins
     const quint32 i = mo->offset(cursor->row());
     const QString line = mo->read(Region(i, mo->index(cursor)));
     const quint32 xOff = v->fontMetrics().width(line) + left + tm.left();
@@ -118,7 +142,7 @@ void TextViewport::paintEvent(QPaintEvent *event)
   if(mvis) {
     QList<MarginView *> *const mv = v->_marginViews;
     {
-      quint32 offset = 0;
+      quint32 offset = -x();
       Q_FOREACH(MarginView *const marginView, mv[TextView::Left]) {
         marginView->render(&p, QPoint(offset, 0), QRegion(), 0);
         offset += marginView->width();
@@ -139,6 +163,8 @@ void TextViewport::paintEvent(QPaintEvent *event)
   if(right > 0)  p.drawLine(width() + x() + right, -y(), x() + width() + right, -y() + height());
   if(top > 0)    p.drawLine(-x(), -y() + top, width(), -y() + top);
   if(bottom > 0) p.drawLine(-x(), -y() + bottom, -x() + width(), -y() + bottom);
+  
+  v->_drawMutex.unlock();
 }
 
 void TextViewport::mouseMoveEvent(QMouseEvent *event)
@@ -171,6 +197,43 @@ void TextViewport::mouseReleaseEvent(QMouseEvent *event)
   _tv->_inputController->mouseReleased(event);
 }
 
+HighlightWorker::HighlightWorker(TextView *const textView)
+  : _textView(textView)
+  , _exit(false)
+{
+}
+
+void HighlightWorker::run()
+{
+  for(;;) {
+    _mut.lock();
+    _highlight.wait(&_mut);
+    qDebug() << "Highlight!!";
+    if(_exit) {
+      _mut.unlock();
+      return;
+    }
+    SyntaxHighlighter *const sh = _textView->syntaxHighlighter();
+    TextModel *const m = _textView->model();
+    StylePalette *const s = _textView->stylePalette();
+    if(!sh || !m || !s) continue;
+    const QList<StyleRegion> styleRegions = sh->stylize(m, s);
+    _textView->setStyleRegions(styleRegions);
+    _mut.unlock();
+  }
+}
+
+void HighlightWorker::highlight()
+{
+  _highlight.wakeAll();
+}
+
+void HighlightWorker::exit()
+{
+  _exit = true;
+  _highlight.wakeAll();
+}
+
 TextView::TextView(QWidget *const parent)
   : QScrollArea(parent)
   , _stylePalette(0)
@@ -180,6 +243,8 @@ TextView::TextView(QWidget *const parent)
   , _inputController(0)
   , _selectionStart(-1)
   , _selectionEnd(-1)
+  , _highlightWorker(new HighlightWorker(this))
+  , _historyManager(new TextOperationHistoryManager())
 {
   setAttribute(Qt::WA_OpaquePaintEvent);
   setStylePalette(new BasicStylePalette);
@@ -188,10 +253,14 @@ TextView::TextView(QWidget *const parent)
   setWidget(new TextViewport(this));
   setWidgetResizable(true);
   updateDimensions();
+  _highlightWorker->setAutoDelete(true);
+  QThreadPool::globalInstance()->start(_highlightWorker);
+  connect(&_highlightTimer, &QTimer::timeout, _highlightWorker, &HighlightWorker::highlight);
 }
 
 TextView::~TextView()
 {
+  delete _historyManager;
   // delete _colorPalette;
   // delete _inputController;
   // qDeleteAll(_cursors);
@@ -199,14 +268,18 @@ TextView::~TextView()
     // qDeleteAll(_marginViews[(TextView::Location)i]);
   }
   // takeWidget();
+  _highlightWorker->exit();
 }
 
 void TextView::setModel(TextModel *const model)
 {
+  _drawMutex.lock();
   _model = model;
   connect(_model, &TextModel::updated, this, &TextView::updateDimensions);
   connect(_model, &TextModel::updated, this, &TextView::rehighlight);
   connect(_model, &TextModel::updated, this, &TextView::invalidateRegion);
+  connect(_model, &TextModel::sizeChanged, this, &TextView::sizeChanged);
+  _drawMutex.unlock();
   updateDimensions();
   invalidateRegion(model ? model->fullRegion() : Region());
   setStyleRegions(QList<StyleRegion>());
@@ -220,10 +293,12 @@ TextModel *TextView::model() const
 
 void TextView::setStylePalette(StylePalette *const stylePalette)
 {
+  _drawMutex.lock();
   Q_ASSERT(stylePalette != 0);
   delete _stylePalette;
   _stylePalette = stylePalette;
   connect(_stylePalette, SIGNAL(roleChanged(QString, QColor)), SLOT(rehighlight()));
+  _drawMutex.unlock();
 }
 
 StylePalette *TextView::stylePalette() const
@@ -233,7 +308,9 @@ StylePalette *TextView::stylePalette() const
 
 void TextView::setMarginViews(const Location location, const QList<MarginView *> marginViews)
 {
+  _drawMutex.lock();
   _marginViews[location] = marginViews;
+  _drawMutex.unlock();
   update();
 }
 
@@ -244,10 +321,11 @@ const QList<MarginView *> TextView::marginViews(const Location location) const
 
 void TextView::addMarginView(const Location location, MarginView *const marginView)
 {
+  _drawMutex.lock();
   marginView->setTextView(this);
   marginView->setStylePalette(_stylePalette);
   _marginViews[location].append(marginView);
-
+  _drawMutex.unlock();
   update();
 }
 
@@ -261,7 +339,9 @@ void TextView::removeMarginView(MarginView *const marginView)
 
 void TextView::setTextMargins(const QMargins &textMargins)
 {
+  _drawMutex.lock();
   _textMargins = textMargins;
+  _drawMutex.unlock();
 }
 
 const QMargins &TextView::textMargins() const
@@ -305,10 +385,7 @@ void TextView::updateDimensions()
 
 void TextView::rehighlight()
 {
-  if(_syntaxHighlighter && _model) {
-    _styleRegions = _syntaxHighlighter->stylize(_model, _stylePalette);
-    qSort(_styleRegions);
-  }
+  _highlightTimer.start(300);
   updateContiguousStyleRegions();
   dirty(QRect(0, 0, _backing.width(), _backing.height()));
 }
@@ -321,6 +398,8 @@ void TextView::invalidateRegion(const Region &region)
   const quint32 invalidSize = _model->occurencesOf('\n', region) + 2;
   const quint32 yOff = lines * lineHeight;
   const quint32 height = invalidSize * lineHeight;
+  
+  qDebug() << "Invalidate" << region;
 
   dirty(QRect(0, yOff, width(), height));
 }
@@ -359,6 +438,27 @@ void TextView::keyReleaseEvent(QKeyEvent *event)
   _inputController->keyReleased(event);
 }
 
+void TextView::sizeChanged(const Region &newRegion, const Region &oldRegion)
+{
+  _drawMutex.lock();
+  const qint32 shift = (qint32)newRegion.size() - (qint32)oldRegion.size();
+  QList<StyleRegion>::iterator it = _styleRegions.begin();
+  for(; it != _styleRegions.end(); ++it) {
+    StyleRegion &sr = *it;
+    Region r = sr.region();
+    if(oldRegion.start() > r.start() && oldRegion.end() < r.end()) {
+      if(shift < 0 && -shift > r.end()) r.setEnd(0);
+      else r.setEnd(r.end() + shift);
+    } else if(r.end() >= oldRegion.start()) {
+      r = r.shift(shift);
+    }
+    sr.setRegion(r);
+  }
+  _drawMutex.unlock();
+  updateContiguousStyleRegions();
+  update();
+}
+
 void TextView::fitMarginViews()
 {
   for(quint8 i = 0; i < 4; ++i) {
@@ -394,20 +494,23 @@ quint32 TextView::computeWidth() const
   Region largestRun;
   quint32 last = 0;
   for(;;) {
-    const qint32 next = _model->indexOf('\n', Region(last, _model->size()));
-    if(next < 0) break;
+    if(last >= _model->size()) break;
+    qint32 next = _model->indexOf('\n', Region(last, _model->size()));
+    if(next < 0) next = _model->size();
     if(largestRun.size() < next - last) {
       largestRun.setStart(last);
       largestRun.setEnd(next);
     }
     last = next + 1;
   }
-  return fontMetrics().width(_model->read(largestRun));
+  return qMax(fontMetrics().width(_model->read(largestRun)), 1);
 }
 
 void TextView::setMarginsVisible(const bool marginsVisible)
 {
+  _drawMutex.lock();
   _marginsVisible = marginsVisible;
+  _drawMutex.unlock();
   updateDimensions();
   widget()->update();
 }
@@ -420,8 +523,10 @@ bool TextView::marginsVisible() const
 void TextView::setInputController(InputController *const inputController)
 {
   if(_inputController == inputController) return;
+  _drawMutex.lock();
   delete _inputController;
   _inputController = inputController;
+  _drawMutex.unlock();
   if(!_inputController) return;
   _inputController->setParent(this);
   _inputController->setTextView(this);
@@ -434,19 +539,26 @@ InputController *TextView::inputController() const
 
 void TextView::addCursor(Cursor *const cursor)
 {
+  _drawMutex.lock();
   connect(cursor, &Cursor::positionChanged, this, &TextView::update);
   _cursors.append(cursor);
+  _drawMutex.unlock();
 }
 
 void TextView::removeCursor(Cursor *const cursor)
 {
+  _drawMutex.lock();
   _cursors.removeAll(cursor);
+  _historyManager->removeCursor(cursor);
   cursor->disconnect(this);
+  _drawMutex.unlock();
 }
 
 void TextView::setCursors(const QList<Cursor *> &cursors)
 {
+  _drawMutex.lock();
   _cursors = cursors;
+  _drawMutex.unlock();
 }
 
 const QList<Cursor *> &TextView::cursors() const
@@ -456,7 +568,9 @@ const QList<Cursor *> &TextView::cursors() const
 
 void TextView::setSyntaxHighlighter(SyntaxHighlighter *const syntaxHighlighter)
 {
+  _drawMutex.lock();
   _syntaxHighlighter = syntaxHighlighter;
+  _drawMutex.unlock();
   setStylePalette(_syntaxHighlighter->createStylePalette());
 }
 
@@ -467,34 +581,38 @@ SyntaxHighlighter *TextView::syntaxHighlighter() const
 
 void TextView::updateContiguousStyleRegions()
 {
+  _drawMutex.lock();
   _contiguousStyleRegions.clear();
+  _drawMutex.unlock();
+  
   if(!_model) return;
   
   const QColor textBase = _stylePalette
     ? _stylePalette->style("text/base", Style(Qt::black)).color()
     : QColor(Qt::black);
   
+  _drawMutex.lock();
   if(_styleRegions.isEmpty()) {
     _contiguousStyleRegions.append(StyleRegion(_model->fullRegion(), textBase));
-    return;
-  }
-  
-  QList<StyleRegion>::const_iterator it = _styleRegions.begin();
-  quint32 step = 0;
-  for(; it != _styleRegions.end(); ++it) {
-    const StyleRegion &c = *it;
-    if(step > c.region().start()) continue;
-    if(step != c.region().start()) {
-      const Region add(step, c.region().start());
+  } else {
+    QList<StyleRegion>::const_iterator it = _styleRegions.begin();
+    quint32 step = 0;
+    for(; it != _styleRegions.end(); ++it) {
+      const StyleRegion &c = *it;
+      if(step > c.region().start()) continue;
+      if(step != c.region().start()) {
+        const Region add(step, c.region().start());
+        _contiguousStyleRegions.append(StyleRegion(add, textBase));
+      }
+      _contiguousStyleRegions.append(c);
+      step = c.region().end();
+    }
+    if(step < _model->size()) {
+      const Region add(step, _model->size());
       _contiguousStyleRegions.append(StyleRegion(add, textBase));
     }
-    _contiguousStyleRegions.append(c);
-    step = c.region().end();
   }
-  if(step < _model->size()) {
-    const Region add(step, _model->size());
-    _contiguousStyleRegions.append(StyleRegion(add, textBase));
-  }
+  _drawMutex.unlock();
   
   // TODO: Make less naive
   dirty(QRect(0, 0, _backing.width(), _backing.height()));
@@ -502,8 +620,10 @@ void TextView::updateContiguousStyleRegions()
 
 void TextView::setStyleRegions(const QList<StyleRegion> &styleRegions)
 {
+  _drawMutex.lock();
   _styleRegions = styleRegions;
   qSort(_styleRegions);
+  _drawMutex.unlock();
   rehighlight();
 }
 
@@ -535,13 +655,25 @@ void TextView::setSelection(const Region &region)
 
 void TextView::setSelection(const QList<Region> &selection)
 {
+  _drawMutex.lock();
   _selection = selection;
+  _drawMutex.unlock();
   update();
 }
 
 const QList<Region> &TextView::selection() const
 {
   return _selection;
+}
+
+void TextView::setHistoryManager(TextOperationHistoryManager *const historyManager)
+{
+  _historyManager = historyManager;
+}
+
+TextOperationHistoryManager *TextView::historyManager() const
+{
+  return _historyManager;
 }
 
 quint32 TextView::indexUnder(const QPoint &p) const
@@ -593,8 +725,10 @@ void TextView::dirty(const QRect &region)
 void TextView::renderOn(QPaintDevice *device)
 {
   if(_backing.isNull() || _backing.width() == 0 || _backing.height() == 0) return;
-  QPainter p(device);
   if(!_model) return;
+  QPainter p(device);
+  
+  _drawMutex.lock();
   
   const quint32 lineHeight = fontMetrics().height();
   const quint32 modelSize = _model->size();
@@ -677,6 +811,8 @@ void TextView::renderOn(QPaintDevice *device)
     }
   }
   _dirty.clear();
+  
+  _drawMutex.unlock();
 }
 
 void TextView::update()

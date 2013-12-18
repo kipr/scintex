@@ -23,9 +23,15 @@ namespace scintex
     Region left() const;
     Region right(const quint32 end) const;
     
+    Region shift(const qint32 offset) const;
+    
+    QList<Region> intersect(const Region &region) const;
+    
     static QList<Region> coalesce(QList<Region> regions);
+    static QList<Region> intersect(const QList<Region> &a, const QList<Region> &b);
     
     bool operator <(const Region &rhs) const;
+    bool operator ==(const Region &rhs) const;
     
   private:
     quint32 _start;
