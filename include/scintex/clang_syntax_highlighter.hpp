@@ -5,25 +5,34 @@
 
 namespace scintex
 {
+  class ClangContext;
+  
   class ClangSyntaxHighlighter : public SyntaxHighlighter
   {
   public:
+    ClangSyntaxHighlighter();
+    
     void setIncludes(const QStringList &includes);
     const QStringList &includes() const;
     
     void setIncludeDirectories(const QStringList &includeDirectories);
     const QStringList &includeDirectories() const;
     
+    virtual void setTextModel(TextModel *const model);
     
-    virtual QList<StyleRegion> stylize(TextModel *const model,
+    virtual QList<StyleRegion> stylize(const Region &region);
     
-    const StylePalette *const stylePalette) const;
     virtual StylePalette *createStylePalette() const;
     
   private:
+    QStringList args() const;
+    bool writeModel() const;
+    void refreshContext();
+    
     QStringList _includes;
     QStringList _includeDirectories;
-    
+    QString _filePath;
+    ClangContext *_context;
   };
 }
 

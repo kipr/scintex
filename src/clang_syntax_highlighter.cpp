@@ -25,6 +25,25 @@ namespace scintex
   private:
     QString cursorToRole(const CXCursor &cursor) const;
   };
+  
+  class ClangContext
+  {
+  public:
+    ClangContext(const QStringList &args);
+    ~ClangContext();
+    
+    bool reparse();
+    
+    const CXIndex &index() const;
+    const CXTranslationUnit &unit() const;
+    
+  private:
+    void parse() const;
+    mutable bool _lazyInit;
+    const QStringList _args;
+    CXIndex _index;
+    mutable CXTranslationUnit _unit;
+  };
 }
 
 using namespace scintex;
@@ -176,6 +195,63 @@ QString ClangStylePalette::cursorToRole(const CXCursor &cursor) const
   return "";
 }
 
+ClangContext::ClangContext(const QStringList &args)
+  : _lazyInit(false)
+  , _args(args)
+  , _index(clang_createIndex(0, 0))
+{
+  
+}
+
+ClangContext::~ClangContext()
+{
+  if(_lazyInit) clang_disposeTranslationUnit(_unit);
+  clang_disposeIndex(_index);
+}
+
+bool ClangContext::reparse()
+{
+  if(!_lazyInit) {
+    parse();
+    _lazyInit = true;
+    return true;
+  }
+  return clang_reparseTranslationUnit(_unit, 0, 0,
+    clang_defaultReparseOptions(_unit)) == 0;
+}
+
+const CXIndex &ClangContext::index() const
+{
+  return _index;
+}
+
+const CXTranslationUnit &ClangContext::unit() const
+{
+  if(!_lazyInit) {
+    parse();
+    _lazyInit = true;
+  }
+  return _unit;
+}
+
+void ClangContext::parse() const
+{
+  unsigned argc = _args.size();
+  char **argv = new char *[argc];
+  for(quint32 i = 0; i < argc; ++i) {
+    const QByteArray arg = _args[i].toUtf8().data();
+    argv[i] = new char[arg.size() + 1];
+    memcpy(argv[i], arg.data(), arg.size());
+    argv[i][arg.size()] = 0;
+  }
+  
+  _unit = clang_parseTranslationUnit(_index, 0, 
+    argv, argc, 0, 0, clang_defaultEditingTranslationUnitOptions());
+  
+  for(quint32 i = 0; i < _args.size(); ++i) delete[] argv[i];
+  delete[] argv;
+}
+
 static QDebug &operator <<(QDebug &stream, const Region &r)
 {
   stream << "(" << r.start() << "to" << r.end() << ")";
@@ -192,6 +268,7 @@ struct Data
   TextModel *model;
   const ClangStylePalette *palette;
   QList<StyleRegion> *ret;
+  Region region;
 };
 
 static Region next(const QString &str, const QRegExp &reg, int &i, const Region &r)
@@ -221,17 +298,20 @@ static CXChildVisitResult visitor(CXCursor cur, CXCursor parent, CXClientData da
   const Region r = cursorRegion(cur);
   if(r.size() < 1 || clang_isPreprocessing(parent.kind)) return CXChildVisit_Continue;
   
-  Data *const d = (Data *)data;
+  Data *const d = reinterpret_cast<Data *>(data);
+  
   const StylePalette *const p = d->palette;
   TextModel *const m = d->model;
   const QString s = m->read(r);
   
-  if(s.isEmpty()) return CXChildVisit_Continue;
+  if(!d->region.contains(r) || s.isEmpty()) return CXChildVisit_Continue;
   
   QList<StyleRegion> &ret = *d->ret;
   const QRegExp id("\\w+");
   
   bool recurse = true;
+  
+  qDebug() << "kind" << cur.kind << "data" << s;
   
   if(cur.kind == CXCursor_FunctionDecl) ret << handleDecl(s, id, r, "function/return_type",
     "function/name", m, p);
@@ -250,6 +330,7 @@ static CXChildVisitResult visitor(CXCursor cur, CXCursor parent, CXClientData da
   else if(cur.kind == CXCursor_ParmDecl) ret << handleDecl(s, id, r, "parameter/type",
     "parameter/name", m, p);
   else if(cur.kind == CXCursor_IntegerLiteral || cur.kind == CXCursor_FloatingLiteral) {
+    qDebug() << "NUMBER LITERAL" << s;
     ret << StyleRegion(r, p->style("code/literal/number"));
   } else if(cur.kind == CXCursor_CharacterLiteral) {
     ret << StyleRegion(r, p->style("code/literal/character"));
@@ -260,7 +341,9 @@ static CXChildVisitResult visitor(CXCursor cur, CXCursor parent, CXClientData da
   } else if(cur.kind == CXCursor_ReturnStmt) {
     ret << StyleRegion(r, p->style("code/statement/return"));
   } else if(cur.kind == CXCursor_IfStmt) {
-    ret << StyleRegion(r, p->style("code/statement/if"));
+    int i = 0;
+    Region _1 = next(s, id, i, r);
+    ret << StyleRegion(_1, p->style("code/statement/if"));
   } else if(cur.kind == CXCursor_BreakStmt) {
     ret << StyleRegion(r, p->style("code/statement/break"));
   } else if(cur.kind == CXCursor_GotoStmt) {
@@ -301,8 +384,9 @@ static CXChildVisitResult visitor(CXCursor cur, CXCursor parent, CXClientData da
     ret << StyleRegion(r, p->style("code/preprocessor/include"));
     recurse = false;
   } else {
-    qDebug() << "unhandled" << cur.kind << " " << m->read(cursorRegion(cur));
   }
+  
+
   
   Region comment = rangeRegion(clang_Cursor_getCommentRange(cur));
   if(comment.size() > 0) {
@@ -314,9 +398,16 @@ static CXChildVisitResult visitor(CXCursor cur, CXCursor parent, CXClientData da
   return recurse ? CXChildVisit_Recurse : CXChildVisit_Continue;
 }
 
+ClangSyntaxHighlighter::ClangSyntaxHighlighter()
+  : _context(0)
+{
+  
+}
+
 void ClangSyntaxHighlighter::setIncludes(const QStringList &includes)
 {
   _includes = includes;
+  refreshContext();
 }
 
 const QStringList &ClangSyntaxHighlighter::includes() const
@@ -327,6 +418,7 @@ const QStringList &ClangSyntaxHighlighter::includes() const
 void ClangSyntaxHighlighter::setIncludeDirectories(const QStringList &includeDirectories)
 {
   _includeDirectories = includeDirectories;
+  refreshContext();
 }
 
 const QStringList &ClangSyntaxHighlighter::includeDirectories() const
@@ -334,59 +426,32 @@ const QStringList &ClangSyntaxHighlighter::includeDirectories() const
   return _includeDirectories;
 }
 
-QList<StyleRegion> ClangSyntaxHighlighter::stylize(TextModel *const model,
-  const StylePalette *const stylePalette) const
+void ClangSyntaxHighlighter::setTextModel(TextModel *const model)
 {
-  const ClangStylePalette *const ccp = dynamic_cast<const ClangStylePalette *>(stylePalette);
+  SyntaxHighlighter::setTextModel(model);
+  _filePath = QDir::temp().absoluteFilePath("highlight.cpp");
+  writeModel();
+  refreshContext();
+}
+
+QList<StyleRegion> ClangSyntaxHighlighter::stylize(const Region &region)
+{
+  if(!textModel() || !stylePalette()) return QList<StyleRegion>();
+  const ClangStylePalette *const ccp = dynamic_cast<const ClangStylePalette *>(stylePalette());
   
   ////////////////////////////////////////
   // PART 0 -- Create file to highlight //
   ////////////////////////////////////////
-  const QString path = QDir::temp().absoluteFilePath("highlight.cpp");
-  QFile file(path);
   
-  if(!file.open(QIODevice::WriteOnly)) {
-    QFileInfo info(file);
-    qWarning() << "Failed to open" << info.absoluteFilePath() << "for writing";
+  if(!writeModel()) {
+    qDebug() << "Failed to write model";
     return QList<StyleRegion>();
   }
+  _context->reparse();
   
-  const QString contents = model->read(model->fullRegion());
-  file.write(contents.toUtf8());
-  file.close();
+  const QString area = textModel()->read(region);
   
-  QString argString;
-  
-  Q_FOREACH(const QString &includeDirectory, _includeDirectories) {
-    argString += "-I\"" + includeDirectory + "\" ";
-  }
-  
-  Q_FOREACH(const QString &include, _includes) {
-    argString += "-include \"" + include + "\" ";
-  }
-  
-  const QStringList args = argString.trimmed().split(" ");
-  char **const argv = new char *[args.size() + 1];
-  const QByteArray pathUtf = path.toUtf8();
-  argv[0] = new char[pathUtf.size() + 1];
-  memcpy(argv[0], pathUtf.data(), pathUtf.size());
-  argv[0][pathUtf.size()] = 0;
-  for(quint32 i = 0; i < args.size(); ++i) {
-    const QByteArray arg = args[i].toUtf8().data();
-    argv[i + 1] = new char[arg.size() + 1];
-    memcpy(argv[i + 1], arg.data(), arg.size());
-    argv[i + 1][arg.size()] = 0;
-  }
-  
-
-  CXIndex index = clang_createIndex(0, 0);
-  CXTranslationUnit unit = clang_parseTranslationUnit(index, 0, 
-   argv, args.size() + 1, 0, 0, CXTranslationUnit_None);
-  
-  for(quint32 i = 0; i < args.size() + 1; ++i) delete[] argv[i];
-  delete[] argv;
-  
-  CXCursor cursor = clang_getTranslationUnitCursor(unit);
+  CXCursor cursor = clang_getTranslationUnitCursor(_context->unit());
   CXSourceRange sr = clang_getCursorExtent(cursor);
   
   QList<StyleRegion> ret;
@@ -396,10 +461,10 @@ QList<StyleRegion> ClangSyntaxHighlighter::stylize(TextModel *const model,
   /////////////////////////////////////
   CXToken *tokens;
   unsigned numTokens = 0;
-  clang_tokenize(unit, sr, &tokens, &numTokens);
+  clang_tokenize(_context->unit(), sr, &tokens, &numTokens);
   for (int i = 0; i < numTokens; ++i) {
     CXToken &tok = tokens[i];
-    const Region r = rangeRegion(clang_getTokenExtent(unit, tok));
+    const Region r = rangeRegion(clang_getTokenExtent(_context->unit(), tok));
     
     const CXTokenKind kind = clang_getTokenKind(tok);
     Style c;
@@ -410,21 +475,21 @@ QList<StyleRegion> ClangSyntaxHighlighter::stylize(TextModel *const model,
     if(c.color().isValid()) ret << StyleRegion(r, c);
   }
   
-  clang_disposeTokens(unit, tokens, numTokens);
+  clang_disposeTokens(_context->unit(), tokens, numTokens);
   
   {
     bool sawCont = false;
     bool inPrep = false;
     bool inString = false;
     Region current;
-    for(quint32 i = 0; i < contents.size(); ++i) {
-      const QChar c = contents[i];
+    for(quint32 i = 0; i < area.size(); ++i) {
+      const QChar c = area[i];
       if(c == '\"' || c == '\'') {
-        if(contents[i - 1] != '\\') inString = !inString;
+        if(area[i - 1] != '\\') inString = !inString;
       }
       if(!inString && c == '#') {
         inPrep = true;
-        current.setStart(i);
+        current.setStart(i + region.start());
       }
       if(inPrep && c == '\\') sawCont = true;
       if(inPrep && c == '\n') {
@@ -432,7 +497,7 @@ QList<StyleRegion> ClangSyntaxHighlighter::stylize(TextModel *const model,
         sawCont = false;
       
         if(!inPrep) {
-          current.setEnd(i);
+          current.setEnd(i + region.start());
           ret << StyleRegion(current, ccp->style("code/preprocessor/definition"));
         }
       }
@@ -443,54 +508,55 @@ QList<StyleRegion> ClangSyntaxHighlighter::stylize(TextModel *const model,
   // PART 2 -- Traverse AST //
   ////////////////////////////
   Data data;
-  data.model = model;
+  data.model = textModel();
   data.palette = ccp;
   data.ret = &ret;
-  clang_visitChildren(clang_getTranslationUnitCursor(unit), &visitor, (void *)&data);
-
-
-  /////////////////////////////
-  // PART 2 -- Split regions //
-  /////////////////////////////
-  split:
-  qSort(ret.begin(), ret.end(), regionSize);
-  for(size_t i = 0; i < ret.size(); ++i) {
-    const StyleRegion bc = ret[i];
-    const Region br = bc.region();
-  
-    for(size_t j = i + 1; j < ret.size(); ++j) {
-      const StyleRegion lc = ret[j];
-      const Region lr = lc.region();
-      
-      // If this region is completely contained within another region,
-      // split based off of color to create three regions (with two possibly empty)
-      if(lr.start() >= br.start() && lr.end() <= br.end()) {
-        const Region s[3] = {
-          Region(br.start(), lr.start()),
-          Region(lr.start(), lr.end()),
-          Region(lr.end(), br.end())
-        };
-        
-        ret.removeAt(j);
-        ret.removeAt(i);
-        
-        if(s[0].size() > 0) ret.append(StyleRegion(s[0], bc.style()));
-        if(s[1].size() > 0) ret.append(StyleRegion(s[1], lc.style()));
-        if(s[2].size() > 0) ret.append(StyleRegion(s[2], bc.style()));
-        
-        goto split;
-      }
-    }
-  }
-  
-  clang_disposeTranslationUnit(unit);
-  clang_disposeIndex(index);
+  data.region = region;
+  clang_visitChildren(clang_getTranslationUnitCursor(_context->unit()), &visitor, (void *)&data);
   
   return ret;
-  
 }
 
 StylePalette *ClangSyntaxHighlighter::createStylePalette() const
 {
   return new ClangStylePalette();
+}
+
+QStringList ClangSyntaxHighlighter::args() const
+{
+  QStringList ret;
+  ret << _filePath;
+  Q_FOREACH(const QString &includeDirectory, _includeDirectories) {
+    ret << ("-I" + includeDirectory);
+  }
+  Q_FOREACH(const QString &include, _includes) {
+    ret << "-include" << include;
+  }
+  return ret;
+}
+
+bool ClangSyntaxHighlighter::writeModel() const
+{
+  TextModel *const model = textModel();
+  if(!model) return false;
+  
+  QFile file(_filePath);
+  
+  if(!file.open(QIODevice::WriteOnly)) {
+    QFileInfo info(file);
+    qWarning() << "Failed to open" << info.absoluteFilePath() << "for writing";
+    return false;
+  }
+  
+  const QString contents = model->read(model->fullRegion());
+  file.write(contents.toUtf8());
+  file.close();
+  
+  return true;
+}
+
+void ClangSyntaxHighlighter::refreshContext()
+{
+  delete _context;
+  _context = new ClangContext(args());
 }

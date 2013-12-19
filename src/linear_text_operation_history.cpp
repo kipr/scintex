@@ -12,6 +12,7 @@ LinearTextOperationHistory::LinearTextOperationHistory(const quint32 maxSize)
 
 void LinearTextOperationHistory::addTextOperation(const TextOperation &textOperation)
 {
+  if(!textOperation.isValid()) return;
   rewind();
   ++_head;
   _track.append(textOperation);

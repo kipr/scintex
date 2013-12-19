@@ -58,6 +58,13 @@ Region Region::shift(const qint32 offset) const
   return Region(start < 0 ? 0 : start, end < 0 ? 0 : end);
 }
 
+bool Region::overlaps(const Region &r) const
+{
+  return (r._start < _start && r._end > _start)
+    || (r._start < _end && r._end >= _end)
+    || contains(r);
+}
+
 bool Region::contains(const Region &r) const
 {
   return r._start >= _start && r._end <= _end;
@@ -66,7 +73,7 @@ bool Region::contains(const Region &r) const
 QList<Region> Region::intersect(const Region &region) const
 {
   // No intersection, no split
-  if(_start >= region.end() || _end < region.start()) {
+  if(!contains(region)) {
     return QList<Region>() << *this;
   }
   

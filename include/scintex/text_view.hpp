@@ -116,6 +116,7 @@ namespace scintex
     quint32 marginSize(const Location location) const;
     quint32 computeHeight() const;
     quint32 computeWidth() const;
+    void drawStyleRegion(QPainter &p, const StyleRegion &sr, const Region &dirty) const;
     
     QList<Region> _selection;
     
@@ -142,6 +143,8 @@ namespace scintex
     QMutex _drawMutex;
     
     TextOperationHistoryManager *_historyManager;
+    
+    quint32 _modificationCounter;
   };
 }
 

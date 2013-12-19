@@ -12,11 +12,21 @@ namespace scintex
   class SyntaxHighlighter
   {
   public:
+    SyntaxHighlighter();
     virtual ~SyntaxHighlighter();
     
-    virtual QList<StyleRegion> stylize(TextModel *const model,
-      const StylePalette *const stylePalette) const = 0;
+    virtual void setTextModel(TextModel *const model);
+    virtual TextModel *textModel() const;
+    
+    virtual void setStylePalette(const StylePalette *const stylePalette);
+    virtual const StylePalette *stylePalette() const;
+    
+    virtual QList<StyleRegion> stylize(const Region &region) = 0;
     virtual StylePalette *createStylePalette() const = 0;
+    
+  private:
+    TextModel *_model;
+    const StylePalette *_stylePalette;
   };
 }
 

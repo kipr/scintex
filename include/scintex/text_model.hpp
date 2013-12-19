@@ -15,6 +15,7 @@ namespace scintex
   {
   Q_OBJECT
   public:
+    TextModel();
     virtual ~TextModel();
     
     // CRUD
@@ -40,6 +41,8 @@ namespace scintex
     
     QList<TextOperation> removePattern(const QRegExp &regex);
     
+    quint32 revision() const;
+    
   Q_SIGNALS:
     void updated(const Region &region);
     void sizeChanged(const Region &newRegion, const Region &oldRegion);
@@ -48,6 +51,9 @@ namespace scintex
     virtual TextOperation _create(const QString &str, const quint32 i) = 0;
     virtual TextOperation _update(const QString &str, const quint32 i) = 0;
     virtual TextOperation _remove(const Region &region) = 0;
+    
+  private:
+    quint32 _revision;
   };
 }
 

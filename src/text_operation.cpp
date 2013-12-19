@@ -4,13 +4,25 @@
 
 using namespace scintex;
 
+TextOperation::TextOperation()
+  : _valid(false)
+{
+  
+}
+
 TextOperation::TextOperation(const Region &ar, const QString &as, const Region &br,
     const QString &bs)
-  : _ar(ar)
+  : _valid(true)
+  , _ar(ar)
   , _as(as)
   , _br(br)
   , _bs(bs)
 {
+}
+
+bool TextOperation::isValid() const
+{
+  return _valid;
 }
 
 void TextOperation::setRegionA(const Region &ar)

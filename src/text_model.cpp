@@ -5,13 +5,20 @@
 
 using namespace scintex;
 
+TextModel::TextModel()
+  : _revision(0)
+{
+}
+
 TextModel::~TextModel()
 {
 }
 
 TextOperation TextModel::create(const QString &str, const quint32 i)
 {
+  if(str.isEmpty()) return TextOperation();
   const TextOperation op = _create(str, i);
+  ++_revision;
   const qint32 newline = indexOf('\n', Region(i + str.size(), size()));
   const Region update(i, newline < 0 ? size() : newline);
   Q_EMIT updated(update);
@@ -21,7 +28,9 @@ TextOperation TextModel::create(const QString &str, const quint32 i)
 
 TextOperation TextModel::update(const QString &str, const quint32 i)
 {
+  if(str.isEmpty()) return TextOperation();
   const TextOperation op = _update(str, i);
+  ++_revision;
   Q_EMIT updated(Region(i, i + str.size()));
   return op;
 }
@@ -29,6 +38,7 @@ TextOperation TextModel::update(const QString &str, const quint32 i)
 TextOperation TextModel::remove(const Region &region)
 {
   const TextOperation op = _remove(region);
+  ++_revision;
   const qint32 newline = indexOf('\n', Region(region.start(), size()));
   Q_EMIT updated(Region(region.start(), newline < 0 ? size() : newline));
   Q_EMIT sizeChanged(Region(region.start(), region.start()), region);
@@ -93,4 +103,9 @@ QList<TextOperation> TextModel::removePattern(const QRegExp &regex)
   Q_EMIT sizeChanged(after, before);
   
   return operations;
+}
+
+quint32 TextModel::revision() const
+{
+  return _revision;
 }

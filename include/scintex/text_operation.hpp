@@ -11,7 +11,10 @@ namespace scintex
   class TextOperation
   {
   public:
+    TextOperation();
     TextOperation(const Region &ar, const QString &as, const Region &br, const QString &bs);
+    
+    bool isValid() const;
     
     void setRegionA(const Region &ar);
     const Region &regionA() const;
@@ -31,6 +34,7 @@ namespace scintex
     bool operator ==(const TextOperation &rhs) const;
     
   private:
+    bool _valid;
     Region _ar;
     QString _as;
     Region _br;

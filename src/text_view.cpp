@@ -218,12 +218,15 @@ void HighlightWorker::run()
     StylePalette *const s = _textView->stylePalette();
     if(!sh || !m || !s) continue;
     
-    QList<StyleRegion> styleRegions = sh->stylize(m, s);
-    qSort(styleRegions);
-    _textView->_drawMutex.lock();
-    _textView->_styleRegions = styleRegions;
-    _textView->_drawMutex.unlock();
-    _textView->updateContiguousStyleRegions();
+    const quint32 rev = m->revision();
+    QList<StyleRegion> styleRegions = sh->stylize(m->fullRegion());
+    if(m->revision() == rev) {
+      qSort(styleRegions);
+      _textView->_drawMutex.lock();
+      _textView->_styleRegions = styleRegions;
+      _textView->_drawMutex.unlock();
+      _textView->updateContiguousStyleRegions();
+    }
     _mut.unlock();
   }
 }
@@ -281,6 +284,7 @@ void TextView::setModel(TextModel *const model)
 {
   _drawMutex.lock();
   _model = model;
+  if(_syntaxHighlighter) _syntaxHighlighter->setTextModel(model);
   connect(_model, &TextModel::updated, this, &TextView::updateDimensions);
   connect(_model, &TextModel::updated, this, &TextView::rehighlight);
   connect(_model, &TextModel::updated, this, &TextView::invalidateRegion);
@@ -304,6 +308,7 @@ void TextView::setStylePalette(StylePalette *const stylePalette)
   Q_ASSERT(stylePalette != 0);
   delete _stylePalette;
   _stylePalette = stylePalette;
+  if(_syntaxHighlighter) _syntaxHighlighter->setStylePalette(_stylePalette);
   connect(_stylePalette, SIGNAL(roleChanged(QString, QColor)), SLOT(rehighlight()));
   _drawMutex.unlock();
 }
@@ -574,7 +579,15 @@ const QList<Cursor *> &TextView::cursors() const
 void TextView::setSyntaxHighlighter(SyntaxHighlighter *const syntaxHighlighter)
 {
   _drawMutex.lock();
+  if(_syntaxHighlighter) {
+    _syntaxHighlighter->setTextModel(0);
+    _syntaxHighlighter->setStylePalette(0);
+  }
   _syntaxHighlighter = syntaxHighlighter;
+  if(_syntaxHighlighter) {
+    _syntaxHighlighter->setTextModel(_model);
+    _syntaxHighlighter->setStylePalette(_stylePalette);
+  }
   _drawMutex.unlock();
   setStylePalette(_syntaxHighlighter->createStylePalette());
 }
@@ -733,17 +746,18 @@ void TextView::renderOn(QPaintDevice *device)
 {
   if(_backing.isNull() || _backing.width() == 0 || _backing.height() == 0) return;
   if(!_model) return;
-  QPainter p(device);
   
   _drawMutex.lock();
+  QPainter p(device);
   
   const quint32 lineHeight = fontMetrics().height();
   const quint32 modelSize = _model->size();
   
   p.setFont(font());
+  const Style bg = _stylePalette->style("background", Style(Qt::white));
   
   Q_FOREACH(const QRect &r, _dirty) {
-    p.fillRect(r, _stylePalette->style("background", Style(Qt::white)).color());
+    p.fillRect(r, bg.color());
     
     const quint32 line1 = r.y() / lineHeight;
     const quint32 line2 = line1 + r.height() / lineHeight + 1;
@@ -771,62 +785,87 @@ void TextView::renderOn(QPaintDevice *device)
     
     const Region dirty(first, last);
 
-    QList<StyleRegion>::const_iterator it = _contiguousStyleRegions.begin();
-  
-    // Fast forward to dirty lines
-    QList<StyleRegion>::const_iterator lit = it;
-    for(; it != _contiguousStyleRegions.end(); ++it) {
-      if(dirty < (*it).region()) break;
-      lit = it;
+    QList<Region> other;
+    other << _model->fullRegion();
+    
+    Q_FOREACH(const StyleRegion &styleRegion, _styleRegions) {
+      if(!dirty.overlaps(styleRegion.region())) continue;
+      QList<Region>::iterator it = other.begin();
+      for(; it != other.end(); ++it) {
+        QList<Region> ret = it->intersect(styleRegion.region());
+        it = other.erase(it);
+        if(ret.size() == 1) {
+          if(ret[0].size() > 0) it = other.insert(it, ret[0]);
+        } else if(ret.size() == 3) {
+          if(ret[0].size() > 0) it = other.insert(it, ret[0]);
+          if(ret[2].size() > 0) it = other.insert(it, ret[2]);
+        }
+      }
+      
+      drawStyleRegion(p, styleRegion, dirty);
     }
     
-    quint32 xOff = 0;
-    for(; lit != _contiguousStyleRegions.end(); ++lit) {
-      const StyleRegion &s = *lit;
-      const Region &r = s.region();
-      const Style &st = s.style();
-      if(r.start() > last) break;
-      p.setPen(st.color());
-      QFont f = p.font();
-      f.setBold(st.isBold());
-      f.setItalic(st.isItalic());
-      p.setFont(f);
-      quint32 begin = qMax(r.start(), dirty.start());
-      // qint32 newline = _model->charsPreceding('\n', begin);
-      // const QString beginChunk = _model->read(Region(begin - newline, begin));
-      // qDebug() << "newline" << newline << "Begin chunk" << beginChunk;
-      // xOff += fontMetrics().width(beginChunk);
-      quint32 line = _model->occurencesOf('\n', Region(0, begin));
-      const quint32 bound = qMin(r.end(), dirty.end());
-      while(begin < bound) {
-        qint32 end = _model->indexOf('\n', Region(begin, r.end()));
-        const quint32 actualEnd = qMin(end < 0 ? r.end() : end + 1, r.end());
-        const Region cr(begin, actualEnd);
-        const QString chunk = _model->read(cr);
-        
-        if(!chunk.trimmed().isEmpty()) {
-          QRect bounding;
-          p.drawText(xOff, line * lineHeight, widget()->width() - xOff, lineHeight,
-            0, chunk, &bounding);
-          if(st.underline()) {
-            p.save();
-            p.setPen(st.underlineColor());
-            p.drawLine(bounding.bottomLeft(), bounding.bottomRight());
-            p.restore();
-          }
-        }
-        xOff += fontMetrics().width(chunk);
-        if(end >= 0) {
-          xOff = 0;
-          line += _model->occurencesOf('\n', cr);
-        }
-        begin = actualEnd;
-      }
-    }
+    // Draw all other non-styled regions
+    const Style s = _stylePalette->style("text/base", Style(Qt::black));
+    Q_FOREACH(const Region &o, other) drawStyleRegion(p, StyleRegion(o, s), dirty);
   }
   _dirty.clear();
   
   _drawMutex.unlock();
+}
+
+void TextView::drawStyleRegion(QPainter &p, const StyleRegion &sr, const Region &dirty) const
+{
+  const quint32 lineHeight = fontMetrics().height();
+  const quint32 modelSize = _model->size();
+  const Region &r = sr.region();
+  const Style &st = sr.style();
+  
+  p.save();
+  
+  quint32 xOff = 0;
+  quint32 begin = qMax(r.start(), dirty.start());
+  const quint32 bound = qMin(r.end(), dirty.end());
+  
+  p.setPen(st.color());
+  
+  QFont f = p.font();
+  f.setBold(st.isBold());
+  f.setItalic(st.isItalic());
+  p.setFont(f);
+  
+  const quint32 preludeBegin = begin - _model->charsPreceding('\n', begin) + 1;
+  const Region prelude(preludeBegin, begin);
+  const QString preludeChunk = _model->read(prelude);
+  
+  xOff = fontMetrics().width(preludeChunk);
+  quint32 line = _model->line(begin);
+  while(begin < bound) {
+    qint32 end = _model->indexOf('\n', Region(begin, r.end()));
+    const quint32 actualEnd = qMin(end < 0 ? r.end() : end + 1, r.end());
+    
+    const Region chunkRegion(begin, actualEnd);
+    const QString chunk = _model->read(chunkRegion);
+    
+    if(!chunk.trimmed().isEmpty()) {
+      QRect bounding;
+      p.drawText(xOff, line * lineHeight, widget()->width() - xOff, lineHeight,
+        0, chunk, &bounding);
+      if(st.underline()) {
+        p.save();
+        p.setPen(st.underlineColor());
+        p.drawLine(bounding.bottomLeft(), bounding.bottomRight());
+        p.restore();
+      }
+    }
+    xOff += fontMetrics().width(chunk);
+    if(end >= 0) {
+      xOff = 0;
+      line += _model->occurencesOf('\n', chunkRegion);
+    }
+    begin = actualEnd;
+  }
+  p.restore();
 }
 
 void TextView::update()
