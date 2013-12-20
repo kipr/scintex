@@ -2,10 +2,11 @@
 #define _SCINTEX_SCROLL_OVERVIEW_VIEW_HPP_
 
 #include "margin_view.hpp"
+#include "compat.hpp"
 
 namespace scintex
 {
-  class ScrollOverviewView : public MarginView
+  class DLL_EXPORT ScrollOverviewView : public MarginView
   {
   public:
     ScrollOverviewView();

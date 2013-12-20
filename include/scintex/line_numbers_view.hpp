@@ -2,12 +2,13 @@
 #define _SCINTEX_LINE_NUMBERS_VIEW_HPP_
 
 #include "margin_view.hpp"
+#include "compat.hpp"
 
 #include <QPixmap>
 
 namespace scintex
 {
-  class LineNumbersView : public MarginView
+  class DLL_EXPORT LineNumbersView : public MarginView
   {
   public:
     LineNumbersView();

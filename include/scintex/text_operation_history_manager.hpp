@@ -2,6 +2,7 @@
 #define _SCINTEX_TEXT_OPERATION_HISTORY_MANAGER_HPP_
 
 #include <QMap>
+#include "compat.hpp"
 
 namespace scintex
 {
@@ -10,7 +11,7 @@ namespace scintex
   class TextModel;
   class TextOperation;
   
-  class TextOperationHistoryManager
+  class DLL_EXPORT TextOperationHistoryManager
   {
   public:
     TextOperationHistoryManager();

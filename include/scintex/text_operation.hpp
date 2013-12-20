@@ -3,12 +3,13 @@
 
 #include "region.hpp"
 #include <QString>
+#include "compat.hpp"
 
 namespace scintex
 {
   class TextModel;
   
-  class TextOperation
+  class DLL_EXPORT TextOperation
   {
   public:
     TextOperation();

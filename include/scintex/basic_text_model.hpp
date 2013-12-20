@@ -2,10 +2,11 @@
 #define _SCINTEX_BASIC_TEXT_MODEL_HPP_
 
 #include "text_model.hpp"
+#include "compat.hpp"
 
 namespace scintex
 {
-  class BasicTextModel : public TextModel
+  class DLL_EXPORT BasicTextModel : public TextModel
   {
   Q_OBJECT
   public:

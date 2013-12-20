@@ -3,10 +3,11 @@
 
 #include <QtGlobal>
 #include <QList>
+#include "compat.hpp"
 
 namespace scintex
 {
-  class Region
+  class DLL_EXPORT Region
   {
   public:
     Region();

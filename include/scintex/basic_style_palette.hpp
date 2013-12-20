@@ -2,13 +2,14 @@
 #define _SCINTEX_BASIC_STYLE_PALETTE_
 
 #include "style_palette.hpp"
+#include "compat.hpp"
 
 #include <QStyle>
 #include <QMap>
 
 namespace scintex
 {
-  class BasicStylePalette : public StylePalette
+  class DLL_EXPORT BasicStylePalette : public StylePalette
   {
   Q_OBJECT
   public:

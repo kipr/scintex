@@ -5,10 +5,11 @@
 
 #include "region.hpp"
 #include "style.hpp"
+#include "compat.hpp"
 
 namespace scintex
 {
-  class StyleRegion
+  class DLL_EXPORT StyleRegion
   {
   public:
     StyleRegion(const Region &region, const Style &style);

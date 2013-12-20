@@ -2,10 +2,11 @@
 #define _SCINTEX_CURSOR_HPP_
 
 #include <QObject>
+#include "compat.hpp"
 
 namespace scintex
 {
-  class Cursor : public QObject
+  class DLL_EXPORT Cursor : public QObject
   {
   Q_OBJECT
   public:

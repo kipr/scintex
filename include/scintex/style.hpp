@@ -2,10 +2,11 @@
 #define _SCINTEX_STYLE_HPP_
 
 #include <QColor>
+#include "compat.hpp"
 
 namespace scintex
 {
-  class Style
+  class DLL_EXPORT Style
   {
   public:
     Style();

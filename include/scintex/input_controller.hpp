@@ -2,6 +2,7 @@
 #define _SCINTEX_INPUT_CONTROLLER_HPP_
 
 #include <QObject>
+#include "compat.hpp"
 
 class QKeyEvent;
 class QMouseEvent;
@@ -10,7 +11,7 @@ namespace scintex
 {
   class TextView;
   
-  class InputController : public QObject
+  class DLL_EXPORT InputController : public QObject
   {
   Q_OBJECT
   public:
