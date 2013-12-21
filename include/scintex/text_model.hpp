@@ -6,12 +6,13 @@
 
 #include "region.hpp"
 #include "text_operation.hpp"
+#include "compat.hpp"
 
 namespace scintex
 {
   class Cursor;
   
-  class TextModel : public QObject
+  class DLL_EXPORT TextModel : public QObject
   {
   Q_OBJECT
   public:

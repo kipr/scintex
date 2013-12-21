@@ -1,11 +1,13 @@
 #ifndef _SCINTEX_TEXT_FORMATTER_HPP_
 #define _SCINTEX_TEXT_FORMATTER_HPP_
 
+#include "compat.hpp"
+
 namespace scintex
 {
   class TextModel;
   
-  class TextFormatter
+  class DLL_EXPORT TextFormatter
   {
   public:
     virtual ~TextFormatter();

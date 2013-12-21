@@ -2,13 +2,14 @@
 #define _SCINTEX_MARGIN_VIEW_HPP_
 
 #include <QWidget>
+#include "compat.hpp"
 
 namespace scintex
 {
   class TextView;
   class StylePalette;
   
-  class MarginView : public QWidget
+  class DLL_EXPORT MarginView : public QWidget
   {
   Q_OBJECT
   public:

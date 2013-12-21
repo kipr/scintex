@@ -8,6 +8,7 @@
 
 #include "region.hpp"
 #include "style_region.hpp"
+#include "compat.hpp"
 
 namespace scintex
 {
@@ -22,7 +23,7 @@ namespace scintex
   class HighlightWorker;
   class TextOperationHistoryManager;
   
-  class TextView : public QScrollArea
+  class DLL_EXPORT TextView : public QScrollArea
   {
   Q_OBJECT
   public:

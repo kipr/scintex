@@ -3,13 +3,14 @@
 
 #include <QList>
 #include "style_region.hpp"
+#include "compat.hpp"
 
 namespace scintex
 {
   class StylePalette;
   class TextModel;
   
-  class SyntaxHighlighter
+  class DLL_EXPORT SyntaxHighlighter
   {
   public:
     SyntaxHighlighter();

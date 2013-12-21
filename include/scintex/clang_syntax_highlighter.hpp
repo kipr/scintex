@@ -2,12 +2,13 @@
 #define _SCINTEX_CLANG_SYNTAX_HIGHLIGHTER_HPP_
 
 #include "syntax_highlighter.hpp"
+#include "compat.hpp"
 
 namespace scintex
 {
   class ClangContext;
   
-  class ClangSyntaxHighlighter : public SyntaxHighlighter
+  class DLL_EXPORT ClangSyntaxHighlighter : public SyntaxHighlighter
   {
   public:
     ClangSyntaxHighlighter();

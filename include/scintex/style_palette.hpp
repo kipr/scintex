@@ -4,10 +4,11 @@
 #include <QObject>
 #include <QString>
 #include "style.hpp"
+#include "compat.hpp"
 
 namespace scintex
 {
-  class StylePalette : public QObject
+  class DLL_EXPORT StylePalette : public QObject
   {
   Q_OBJECT
   public:

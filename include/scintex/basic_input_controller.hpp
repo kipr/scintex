@@ -3,6 +3,7 @@
 
 #include "input_controller.hpp"
 #include "region.hpp"
+#include "compat.hpp"
 
 #include <QMap>
 
@@ -12,7 +13,7 @@ namespace scintex
   class Cursor;
   class TextOperation;
   
-  class BasicInputController : public InputController
+  class DLL_EXPORT BasicInputController : public InputController
   {
   public:
     BasicInputController();

@@ -2,12 +2,13 @@
 #define _SCINTEX_LINEAR_TEXT_OPERATION_HISTORY_HPP_
 
 #include "text_operation.hpp"
+#include "compat.hpp"
 
 #include <QList>
 
 namespace scintex
 {
-  class LinearTextOperationHistory
+  class DLL_EXPORT LinearTextOperationHistory
   {
   public:
     LinearTextOperationHistory(const quint32 maxSize = 0xFFFFFFFF);
