@@ -91,7 +91,7 @@ void TextViewport::paintEvent(QPaintEvent *event)
   
   QPainter p(this);
   const quint32 lineHeight = v->fontMetrics().height();
-  p.fillRect(event->rect(), cp->style("background", Style(Qt::white)).color());
+  p.fillRect(event->rect(), cp->style("text/background", Style(Qt::white)).color());
   const QRect target = event->rect().translated(left + tm.left(),
     top + tm.top());
   const qreal dpr = v->_backing.devicePixelRatio();
@@ -127,7 +127,7 @@ void TextViewport::paintEvent(QPaintEvent *event)
       const quint32 actualEnd = end < 0 ? r.end() : end + 1;
       const QString chunk = mo->read(Region(begin, actualEnd));
       const quint32 chunkWidth = fontMetrics().width(chunk);
-      const QColor c = cp->style("selection", Style(QColor(127, 127, 127, 127))).color();
+      const QColor c = cp->style("text/selection", Style(QColor(127, 127, 127, 127))).color();
       p.fillRect(xOff, line * lineHeight, chunkWidth, lineHeight, c);
       xOff += chunkWidth;
       if(end >= 0) {
@@ -138,12 +138,14 @@ void TextViewport::paintEvent(QPaintEvent *event)
     }
   }
   
-  p.translate(v->geometry().x(), v->geometry().y());
+  p.translate(0, 0);
   if(mvis) {
     QList<MarginView *> *const mv = v->_marginViews;
     {
       quint32 offset = -x();
+      qDebug() << "OFFSET" << offset << " X " << v->geometry().x();
       Q_FOREACH(MarginView *const marginView, mv[TextView::Left]) {
+        marginView->setStylePalette(v->stylePalette());
         marginView->render(&p, QPoint(offset, 0), QRegion(), 0);
         offset += marginView->width();
       }
@@ -158,7 +160,7 @@ void TextViewport::paintEvent(QPaintEvent *event)
   }
   
   p.resetTransform();
-  p.setPen(QColor(240, 240, 240));
+  p.setPen(cp->style("text/margin_divider", Style(QColor(240, 240, 240))).color());
   if(left > 0)   p.drawLine(-x() + left, -y(), -x() + left, -y() + height());
   if(right > 0)  p.drawLine(width() + x() + right, -y(), x() + width() + right, -y() + height());
   if(top > 0)    p.drawLine(-x(), -y() + top, width(), -y() + top);
@@ -251,6 +253,7 @@ TextView::TextView(QWidget *const parent)
   , _inputController(0)
   , _selectionStart(-1)
   , _selectionEnd(-1)
+  , _syntaxHighlighter(0)
   , _highlightWorker(new HighlightWorker(this))
   , _historyManager(new TextOperationHistoryManager())
 {
@@ -754,7 +757,7 @@ void TextView::renderOn(QPaintDevice *device)
   const quint32 modelSize = _model->size();
   
   p.setFont(font());
-  const Style bg = _stylePalette->style("background", Style(Qt::white));
+  const Style bg = _stylePalette->style("text/background", Style(Qt::white));
   
   Q_FOREACH(const QRect &r, _dirty) {
     p.fillRect(r, bg.color());

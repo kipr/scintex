@@ -6,9 +6,12 @@ using namespace scintex;
 
 BasicStylePalette::BasicStylePalette()
 {
-  addRole("background");
+  addRole("text/background");
   addRole("text/base");
   addRole("text/cursor");
+  addRole("line_numbers/background");
+  addRole("line_numbers/base");
+  addRole("text/margin_divider");
 }
 
 QStringList BasicStylePalette::roles() const

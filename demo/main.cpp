@@ -31,37 +31,55 @@ int main(int argc, char *argv[])
   scintex::TextView view;
   view.setInputController(new scintex::BasicInputController);
   view.setSyntaxHighlighter(new scintex::ClangSyntaxHighlighter);
+  const QColor base03("#002b36");
+  const QColor base02("#073642");
+  const QColor base01("#586e75");
+  const QColor base00("#657b83");
+  const QColor base0("#839496");
+  const QColor base1("#93a1a1");
+  const QColor base2("#eee8d5");
+  const QColor base3("#fdf6e3");
+  const QColor yellow("#b58900");
+  const QColor orange("#cb4b16");
+  const QColor red("#dc322f");
+  const QColor magenta("#d33682");
+  const QColor violet("#6c71c4");
+  const QColor blue("#268bd2");
+  const QColor cyan("#2aa198");
+  const QColor green("#859900");
   
-  view.stylePalette()->setStyle("background", scintex::Style(Qt::white));
-  view.stylePalette()->setStyle("text/base", scintex::Style(Qt::black));
-  scintex::StylePalette *const cp = view.stylePalette();
-  const double goldenAngle = 137.508;
-  double h = 0;
-  double s = 1.0;
+  using namespace scintex;
+  
+  StylePalette *const cp = view.stylePalette();
+  cp->setStyle("text/background", Style(base3));
+  cp->setStyle("line_numbers/background", Style(base3));
+  cp->setStyle("line_numbers/base", Style(base01));
+  cp->setStyle("text/base", Style(base01));
+  cp->setStyle("text/margin_divider", Style(base01));
   Q_FOREACH(const QString &role, cp->roles()) {
     if(!role.startsWith("code/")) continue;
-    qDebug() << role << "->" << QColor::fromHsvF(h / 360.0, 1.0, 1.0);
-    if(role.startsWith("code/declaration") && (role.endsWith("type") || role.endsWith("keyword"))) {
-      cp->setStyle(role, scintex::Style(Qt::blue, false, true));
+    if(role.startsWith("code/declaration") && role.endsWith("type")) {
+      cp->setStyle(role, Style(red, true));
+      continue;
+    }
+    if(role.startsWith("code/declaration") && role.endsWith("keyword")) {
+      cp->setStyle(role, Style(base01, true));
       continue;
     }
   }
   
-  cp->setStyle("code/declaration", scintex::Style(Qt::black, false, false));
-  cp->setStyle("code/reference", scintex::Style("#020202", false, false));
-  cp->setStyle("code/statement", scintex::Style(Qt::blue, false, true));
-  cp->setStyle("code/literal/string", scintex::Style("red", false, false));
-  cp->setStyle("code/literal/number", scintex::Style("orange", false, false));
-  cp->setStyle("code/literal/number", scintex::Style("orange", false, false));
-  cp->setStyle("code/comment", scintex::Style(Qt::gray, false, false));
-  cp->setStyle("code/documentation", scintex::Style(Qt::gray, false, false));
-  cp->setStyle("code/preprocessor", scintex::Style(Qt::green, false, false));
+  cp->setStyle("code/declaration", Style(base01));
+  cp->setStyle("code/reference", Style(base1));
+  cp->setStyle("code/statement", Style(green));
+  cp->setStyle("code/literal", Style(magenta));
+  cp->setStyle("code/comment", Style(base1, false, true));
+  cp->setStyle("code/documentation", Style(base1, false, true));
+  cp->setStyle("code/preprocessor", Style(violet));
   
   view.addCursor(new scintex::Cursor(true));
   view.setTextMargins(QMargins(5, 5, 5, 5));
   view.setModel(&model);
   view.setFont(QFont("Menlo", 14));
-
   
   scintex::LineNumbersView *v = new scintex::LineNumbersView;
   v->setFont(QFont("Helvetica", 12));

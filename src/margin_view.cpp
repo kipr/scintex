@@ -8,6 +8,10 @@ MarginView::MarginView()
 {
 }
 
+MarginView::~MarginView()
+{
+}
+
 void MarginView::setTextView(TextView *const textView)
 {
   _textView = textView;

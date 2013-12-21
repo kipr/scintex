@@ -1,6 +1,7 @@
 #include <scintex/line_numbers_view.hpp>
 #include <scintex/text_view.hpp>
 #include <scintex/text_model.hpp>
+#include <scintex/style_palette.hpp>
 
 #include <QPainter>
 #include <QEvent>
@@ -55,6 +56,8 @@ void LineNumbersView::fit(const quint32 lines)
   if(_lines == lines) return;
   const TextView *const view = MarginView::textView();
   const StylePalette *const stylePalette = MarginView::stylePalette();
+  
+  if(!stylePalette) return;
 
   const quint32 lineHeight = view->fontMetrics().height();
   
@@ -65,13 +68,22 @@ void LineNumbersView::fit(const quint32 lines)
   resize(_backing.width() / dpr, _backing.height() / dpr);
   
   QPainter p(&_backing);
-  p.fillRect(0, 0, width(), height(), Qt::white);
-  p.setPen(Qt::lightGray);
+  
+  const Style bg = stylePalette->style("line_numbers/background", Style(Qt::white));
+  p.fillRect(0, 0, width(), height(), bg.color());
+  
+  const Style text = stylePalette->style("line_numbers/base", Style(Qt::lightGray));
+  p.setPen(text.color());
+  QFont f = p.font();
+  f.setBold(text.isBold());
+  f.setItalic(text.isItalic());
+  p.setFont(f);
   
   for(quint32 i = 0; i < lines; ++i) {
     p.drawText(0, i * lineHeight,
       width(), lineHeight, Qt::AlignHCenter | Qt::AlignVCenter,
       QString::number(i + 1));
   }
+  
   _lines = lines;
 }

@@ -13,6 +13,7 @@ namespace scintex
   Q_OBJECT
   public:
     MarginView();
+    virtual ~MarginView();
     
     void setTextView(TextView *const textView);
     TextView *textView() const;
